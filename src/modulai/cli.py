@@ -19,7 +19,7 @@ import click
 from modulai.core.auth import MissingApiKeyError, resolve_api_key
 from modulai.core.docs import fetch_resource_doc, latest_provider_version
 from modulai.core.generate import generate_module
-from modulai.core.schema import fetch_provider_schema, resource_schema
+from modulai.core.schema import fetch_provider_schema, input_schema, resource_schema
 from modulai.core.validate import run_validation_pipeline
 
 
@@ -57,7 +57,8 @@ def generate(
 
     click.echo("Fetching provider schema (terraform init + providers schema -json)...")
     full_schema = fetch_provider_schema(version=version, provider_source=provider_source, provider_source_name=provider_name)
-    resource_schema_json = json.dumps(resource_schema(full_schema, resource_type, provider_source))
+    raw_resource_schema = resource_schema(full_schema, resource_type, provider_source)
+    resource_schema_json = json.dumps(input_schema(raw_resource_schema))
 
     click.echo("Fetching provider docs (pinned to the same version)...")
     docs_markdown = fetch_resource_doc(resource_type, version, provider_name)

@@ -29,9 +29,9 @@ Built incrementally, and this section is kept honest rather than aspirational:
 |---|---|---|
 | `core/auth.py` (BYOK key resolution) | **Yes** | `tests/test_auth.py`, 3/3 passing |
 | `core/docs.py` (pinned provider docs fetch) | **Yes** | Live-tested against the real GitHub API — fetched v5.4.0 and `azurerm_storage_account`'s actual doc |
-| `core/schema.py` (schema introspection) | **No** | Needs a local `terraform` binary; not available in the environment this was built in |
+| `core/schema.py` (schema introspection + input filtering) | **Yes** | Live-tested against real `terraform` v1.16.1 + azurerm v5.4.0 — correctly resolved 102 attributes / 11 nested block types for `azurerm_storage_account`. `input_schema()` (recursive computed-only filter) covered by `tests/test_schema.py`, 4/4 passing, plus verified against the live schema: 74 of the 102 attributes are computed-only exports, correctly stripped at every nesting level |
 | `core/generate.py` (the model call) | **No** | Needs the `anthropic` package and a real API key — untested by design, since this tool never holds your key for you |
-| `core/validate.py` (fmt/init/validate/test/checkov) | **No** | Needs `terraform` and `checkov` binaries, neither available here |
+| `core/validate.py` (fmt/init/validate/test/checkov) | **No** | Needs `terraform` (now available) and `checkov` (still not) |
 | `mcp_server.py` | **No** | Needs the `mcp` package and a real MCP host to connect to |
 
 A hand-built module following this exact design (`azurerm_storage_account`,
@@ -39,6 +39,13 @@ pinned to v5.4.0) exists as a worked example — see the separate
 `terraform-azurerm-storage-account/` output for what this pipeline is meant
 to produce, itself not yet run through a real `terraform validate`/`test`
 either.
+
+**Why `input_schema()` exists**: the raw schema interleaves true inputs with
+computed-only exports, distinguished only by a `computed: true` flag that's
+easy to miss — `generate.py`'s prompt alone asking the model to "respect
+required/optional" isn't a strong enough guarantee. Filtering it out in code
+before the schema ever reaches the model closes that gap structurally instead
+of hoping the prompt is followed.
 
 ## Install
 

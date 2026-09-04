@@ -5,8 +5,13 @@ optional/nested-block structure — not the rendered registry page. The pin is
 always exact (e.g. '= 5.4.0'), never a range: generating "for 5.4.0" must be
 reproducible, not silently drift to whatever a range resolves to later.
 
-Not runnable in an environment without the terraform CLI installed — this
-module has not been executed against a real Terraform binary yet.
+fetch_provider_schema/resource_schema verified live against azurerm v5.4.0 —
+102 top-level attributes on azurerm_storage_account, 11 nested block types,
+matching the hand-built reference module. input_schema() is a direct
+consequence of that same run: 74 of those 102 attributes are computed-only
+exports (e.g. primary_blob_endpoint), not inputs — passing the raw schema to
+the model and trusting a prompt instruction to skip them is exactly the kind
+of thing this tool exists to not do.
 """
 
 from __future__ import annotations
@@ -86,3 +91,32 @@ def resource_schema(full_schema: dict, resource_type: str, provider_source: str 
             if resource_type in resources:
                 return resources[resource_type]
     raise SchemaFetchError(f"{resource_type} not found in schema for {provider_source}")
+
+
+def _filter_block(block: dict) -> dict:
+    attributes = {
+        name: attr
+        for name, attr in block.get("attributes", {}).items()
+        if attr.get("required") or attr.get("optional")
+    }
+    block_types = {
+        name: {
+            "nesting_mode": bt.get("nesting_mode"),
+            "min_items": bt.get("min_items"),
+            "max_items": bt.get("max_items"),
+            "block": _filter_block(bt.get("block", {})),
+        }
+        for name, bt in block.get("block_types", {}).items()
+    }
+    return {"attributes": attributes, "block_types": block_types}
+
+
+def input_schema(resource_schema_entry: dict) -> dict:
+    """Recursively strip computed-only attributes (true outputs) from a
+    resource schema, at every nesting level, keeping only what should become
+    a module variable (required or optional). Without this, a computed-only
+    export like `primary_blob_endpoint` — or `identity.principal_id` nested
+    inside the `identity` block — sits in the same attribute list as real
+    inputs, with only an easy-to-miss `computed: true` flag distinguishing it.
+    """
+    return _filter_block(resource_schema_entry.get("block", {}))
