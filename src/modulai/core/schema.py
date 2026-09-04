@@ -93,11 +93,17 @@ def resource_schema(full_schema: dict, resource_type: str, provider_source: str 
     raise SchemaFetchError(f"{resource_type} not found in schema for {provider_source}")
 
 
-def _filter_block(block: dict) -> dict:
+def _filter_block(block: dict, is_top_level: bool = False) -> dict:
     attributes = {
         name: attr
         for name, attr in block.get("attributes", {}).items()
-        if attr.get("required") or attr.get("optional")
+        if (attr.get("required") or attr.get("optional"))
+        # `id` is every resource's implicit, provider-assigned identifier.
+        # It's often marked optional+computed in newer provider schemas for
+        # framework-internal reasons, but it is never a real settable input —
+        # only excluded at the resource's own top level, since a nested block
+        # could theoretically have a genuine field literally named `id`.
+        and not (is_top_level and name == "id")
     }
     block_types = {
         name: {
@@ -118,5 +124,9 @@ def input_schema(resource_schema_entry: dict) -> dict:
     export like `primary_blob_endpoint` — or `identity.principal_id` nested
     inside the `identity` block — sits in the same attribute list as real
     inputs, with only an easy-to-miss `computed: true` flag distinguishing it.
+    Also drops the top-level `id` attribute — every resource's implicit,
+    provider-assigned identifier, sometimes marked optional+computed in newer
+    provider schemas, but never a real settable input (found live on
+    azurerm_key_vault @ v5.4.0: `id` had `optional: true, computed: true`).
     """
-    return _filter_block(resource_schema_entry.get("block", {}))
+    return _filter_block(resource_schema_entry.get("block", {}), is_top_level=True)

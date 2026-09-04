@@ -16,6 +16,12 @@ FIXTURE_RESOURCE_SCHEMA = {
             "access_tier": {"type": "string", "optional": True},
             # computed-only — an export, not an input. Must never surface as a variable.
             "primary_blob_endpoint": {"type": "string", "computed": True},
+            # `id` marked optional+computed — seen live on azurerm_key_vault @ v5.4.0.
+            # Must be dropped anyway: it's every resource's implicit identifier.
+            "id": {"type": "string", "optional": True, "computed": True},
+            # A genuine optional+computed *input* (e.g. access_policy-shaped) —
+            # proves the id-exclusion is name-specific, not "drop anything computed".
+            "access_policy": {"type": ["list", "object"], "optional": True, "computed": True},
         },
         "block_types": {
             "identity": {
@@ -45,7 +51,20 @@ def test_strips_top_level_computed_only():
 
 def test_keeps_top_level_required_and_optional():
     filtered = input_schema(FIXTURE_RESOURCE_SCHEMA)
-    assert set(filtered["attributes"]) == {"name", "account_tier", "access_tier"}
+    assert set(filtered["attributes"]) == {"name", "account_tier", "access_tier", "access_policy"}
+
+
+def test_drops_top_level_id_even_when_optional_and_computed():
+    filtered = input_schema(FIXTURE_RESOURCE_SCHEMA)
+    assert "id" not in filtered["attributes"]
+
+
+def test_keeps_other_optional_and_computed_attributes():
+    """id is special-cased by name — optional+computed alone must not be
+    treated as a signal to drop something; access_policy is exactly that
+    combination on the real azurerm_key_vault schema and is a real input."""
+    filtered = input_schema(FIXTURE_RESOURCE_SCHEMA)
+    assert "access_policy" in filtered["attributes"]
 
 
 def test_strips_computed_only_inside_nested_block():

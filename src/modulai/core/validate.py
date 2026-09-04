@@ -5,13 +5,17 @@ generated tests/*.tftest.hcl, which use `mock_provider` — no real cloud
 credentials are needed for any step here, which is what makes it safe to run
 for anonymous users of a public tool.
 
-Not runnable without the terraform and checkov binaries installed — this
-module has not been executed end-to-end yet.
+Live-verified end to end (terraform v1.16.1, checkov 3.3.16) against a
+generated azurerm_key_vault module: fmt/init/validate/test all pass for real,
+including a validation-block rejection case and a nested dynamic-block case.
+Two bugs found and fixed by that same run — see _run() and the fmt step below.
 """
 
 from __future__ import annotations
 
+import shutil
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -32,17 +36,44 @@ class ValidationReport:
         return all(s.passed for s in self.steps)
 
 
+def _resolve_windows_script(cmd: list[str]) -> list[str]:
+    """A pip-installed console script can be a .cmd/.bat wrapper rather than
+    a .exe on Windows — subprocess can't launch those directly via
+    CreateProcess without going through cmd.exe first. Found live: checkov
+    installs as checkov.cmd here and raised FileNotFoundError despite the
+    file existing and running fine from an actual shell. No-op elsewhere.
+    """
+    if sys.platform != "win32":
+        return cmd
+    resolved = shutil.which(cmd[0]) or cmd[0]
+    if resolved.lower().endswith((".cmd", ".bat")):
+        return ["cmd", "/c", resolved, *cmd[1:]]
+    return cmd
+
+
 def _run(cmd: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+    cmd = _resolve_windows_script(cmd)
+    try:
+        return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+    except FileNotFoundError:
+        # A genuinely missing binary is a normal, reportable step failure —
+        # not a crash that discards every already-passed step's results.
+        return subprocess.CompletedProcess(cmd, returncode=127, stdout="", stderr=f"{cmd[0]}: command not found")
 
 
 def run_validation_pipeline(module_dir: Path, terraform_bin: str = "terraform", checkov_bin: str = "checkov") -> ValidationReport:
     report = ValidationReport()
 
-    fmt = _run([terraform_bin, "fmt", "-check", "-recursive"], module_dir, 30)
-    report.steps.append(StepResult("fmt", fmt.returncode == 0, fmt.stdout + fmt.stderr))
+    # Apply formatting rather than gate on it — a spacing/alignment mismatch
+    # is trivially self-healing and should never block generation the way an
+    # actual validate/test failure does. `-check` here was found live to fail
+    # the whole pipeline over cosmetic misalignment in generated HCL.
+    fmt = _run([terraform_bin, "fmt", "-recursive"], module_dir, 30)
+    reformatted = fmt.stdout.strip().splitlines()
+    fmt_summary = f"reformatted: {', '.join(reformatted)}" if reformatted else "already formatted"
+    report.steps.append(StepResult("fmt", fmt.returncode == 0, fmt_summary))
     if fmt.returncode != 0:
-        return report  # no point continuing against unformatted HCL
+        return report  # fmt itself erroring (not just reformatting) means invalid HCL syntax
 
     init = _run([terraform_bin, "init", "-input=false", "-backend=false"], module_dir, 120)
     report.steps.append(StepResult("init", init.returncode == 0, init.stdout + init.stderr))
