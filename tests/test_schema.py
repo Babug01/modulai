@@ -5,7 +5,20 @@ azurerm_storage_account schema at v5.4.0 during development: 102 top-level
 attributes, only 28 of them true inputs, the rest computed-only exports.
 """
 
-from modulai.core.schema import cross_reference_with_docs, input_schema
+from modulai.core.schema import ALERT_RESOURCE_TYPE_BY_PROVIDER, cross_reference_with_docs, input_schema
+
+
+def test_alert_resource_type_is_cloud_specific_not_hardcoded_to_azure():
+    # Found live: an earlier version of generate.py hardcoded
+    # azurerm_monitor_metric_alert regardless of target cloud. Each provider
+    # must map to its own real alert resource type, and they must differ —
+    # a passing test here doesn't guarantee the *names* are correct (that's
+    # what the live schema-fetch check covers), only that the mapping isn't
+    # collapsed back to one Azure-specific value for every provider.
+    assert ALERT_RESOURCE_TYPE_BY_PROVIDER["azurerm"] == "azurerm_monitor_metric_alert"
+    assert ALERT_RESOURCE_TYPE_BY_PROVIDER["aws"] == "aws_cloudwatch_metric_alarm"
+    assert ALERT_RESOURCE_TYPE_BY_PROVIDER["google"] == "google_monitoring_alert_policy"
+    assert len(set(ALERT_RESOURCE_TYPE_BY_PROVIDER.values())) == len(ALERT_RESOURCE_TYPE_BY_PROVIDER)
 
 FIXTURE_RESOURCE_SCHEMA = {
     "version": 3,

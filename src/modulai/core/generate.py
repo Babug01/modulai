@@ -18,7 +18,7 @@ import anthropic
 DEFAULT_MODEL = "claude-sonnet-5"
 
 SYSTEM_PROMPT = """\
-You generate a single Terraform module for one Azure resource type, following \
+You generate a single Terraform module for one cloud resource type, following \
 these non-negotiable rules:
 
 1. Module manages exactly one resource instance. Never build for_each into the \
@@ -43,19 +43,23 @@ these non-negotiable rules:
    one scenario exercising a commonly-used optional nested block, and one \
    scenario asserting a validation block correctly rejects bad input.
 6. Follow Azure Verified Modules (AVM) structural conventions where they apply.
-7. Generate alerts.tf: one `azurerm_monitor_metric_alert` resource, `for_each` over \
-   a single `alert_rules` variable — `type = map(object({ metric_namespace, \
-   metric_name, aggregation, operator, threshold, severity = optional(number, 3), \
-   frequency = optional(string, "PT5M"), window_size = optional(string, "PT15M"), \
-   action_group_ids = optional(list(string), []), description = optional(string) \
-   }))`, `default = null`. The `for_each` expression MUST be \
+7. Generate alerts.tf: one resource of the ALERT RESOURCE TYPE given below — its \
+   own schema is provided the same way as the primary resource's, ground every \
+   argument in it exactly per rule 3, never assume it looks like any other cloud's \
+   alerting resource (Azure nests criteria in a block, AWS is mostly flat top-level \
+   fields, GCP uses a filter string — use whichever this schema actually shows). \
+   `for_each` over a single `alert_rules` variable: `type = map(object({...}))` \
+   mirroring that alert resource's own real inputs, EXCLUDING whatever identifies \
+   which resource is being alerted on (name/scopes/target — that comes from the \
+   loop context: each.key as the name, the primary resource's own `.id` as the \
+   target) — `default = null`. The `for_each` expression MUST be \
    `var.alert_rules != null ? var.alert_rules : {}` — `for_each` errors on a bare \
-   null, so guarding it in the expression itself is not optional. `scopes` is the \
-   primary resource's own `.id`. Never invent metric_namespace/metric_name values — \
-   this is a generic pass-through the caller fills in with real Azure Monitor \
-   criteria, not a curated per-resource menu (that would need grounding this tool \
-   doesn't have yet). Document in the README, explicitly, that `null` or omitting \
-   the variable both mean "no alerts."
+   null, so guarding it in the expression itself is not optional. Never invent a \
+   metric/filter value yourself — this is a generic pass-through, the caller \
+   supplies real monitoring criteria for whichever cloud this module targets, not \
+   a curated per-resource menu (that needs grounding this tool doesn't have yet). \
+   Document in the README, explicitly, that `null` or omitting the variable both \
+   mean "no alerts."
 
 Output each file wrapped exactly like this, one block per file, nothing else \
 outside the blocks:
@@ -75,6 +79,14 @@ Provider schema (ground truth for structure/types):
 Provider documentation (ground truth for descriptions only):
 {docs_markdown}
 
+Alert resource type for this cloud: {alert_resource_type}
+
+Alert resource schema (ground truth for alerts.tf structure/types — same rules as above):
+{alert_schema_json}
+
+Alert resource documentation (ground truth for descriptions only):
+{alert_docs_markdown}
+
 Generate: main.tf, variables.tf, outputs.tf, alerts.tf, README.md, tests/defaults.tftest.hcl
 """
 
@@ -93,6 +105,9 @@ def generate_module(
     version: str,
     schema_json: str,
     docs_markdown: str,
+    alert_resource_type: str,
+    alert_schema_json: str,
+    alert_docs_markdown: str,
     provider_source: str = "hashicorp/azurerm",
     model: str = DEFAULT_MODEL,
 ) -> list[GeneratedFile]:
@@ -110,6 +125,9 @@ def generate_module(
                 version=version,
                 schema_json=schema_json,
                 docs_markdown=docs_markdown,
+                alert_resource_type=alert_resource_type,
+                alert_schema_json=alert_schema_json,
+                alert_docs_markdown=alert_docs_markdown,
             ),
         }],
     )

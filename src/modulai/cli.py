@@ -19,7 +19,13 @@ import click
 from modulai.core.auth import MissingApiKeyError, resolve_api_key
 from modulai.core.docs import documented_argument_names, fetch_resource_doc, latest_provider_version
 from modulai.core.generate import generate_module
-from modulai.core.schema import cross_reference_with_docs, fetch_provider_schema, input_schema, resource_schema
+from modulai.core.schema import (
+    ALERT_RESOURCE_TYPE_BY_PROVIDER,
+    cross_reference_with_docs,
+    fetch_provider_schema,
+    input_schema,
+    resource_schema,
+)
 from modulai.core.validate import run_validation_pipeline
 
 
@@ -46,6 +52,15 @@ def generate(
     """Generate a module for RESOURCE_TYPE, e.g. azurerm_storage_account."""
     provider_name = provider_source.split("/")[-1]
 
+    alert_resource_type = ALERT_RESOURCE_TYPE_BY_PROVIDER.get(provider_name)
+    if alert_resource_type is None:
+        click.echo(
+            f"No known alert resource type for provider '{provider_name}' — "
+            f"supported: {', '.join(ALERT_RESOURCE_TYPE_BY_PROVIDER)}",
+            err=True,
+        )
+        sys.exit(1)
+
     try:
         key = resolve_api_key(api_key)
     except MissingApiKeyError as e:
@@ -69,6 +84,13 @@ def generate(
     filtered_schema = cross_reference_with_docs(filtered_schema, documented_argument_names(docs_markdown))
     resource_schema_json = json.dumps(filtered_schema)
 
+    click.echo(f"Fetching alert resource schema+docs ({alert_resource_type})...")
+    raw_alert_schema = resource_schema(full_schema, alert_resource_type, provider_source)
+    filtered_alert_schema = input_schema(raw_alert_schema)
+    alert_docs_markdown = fetch_resource_doc(alert_resource_type, version, provider_name)
+    filtered_alert_schema = cross_reference_with_docs(filtered_alert_schema, documented_argument_names(alert_docs_markdown))
+    alert_schema_json = json.dumps(filtered_alert_schema)
+
     click.echo("Generating module...")
     files = generate_module(
         api_key=key,
@@ -76,6 +98,9 @@ def generate(
         version=version,
         schema_json=resource_schema_json,
         docs_markdown=docs_markdown,
+        alert_resource_type=alert_resource_type,
+        alert_schema_json=alert_schema_json,
+        alert_docs_markdown=alert_docs_markdown,
         provider_source=provider_source,
     )
 

@@ -21,6 +21,19 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+# The alerting/monitoring resource type differs completely per cloud — both
+# the resource name and its argument shape (Azure's `criteria` block vs AWS's
+# flat statistic/comparison_operator/period fields vs GCP's condition_threshold
+# with a filter string) are cloud-specific. Fetching *this* resource's own
+# schema the same way as the primary resource — rather than hand-describing
+# one cloud's shape in the generation prompt and assuming it fits all three —
+# is what makes alerts.tf schema-grounded instead of guessed for AWS/GCP.
+ALERT_RESOURCE_TYPE_BY_PROVIDER = {
+    "azurerm": "azurerm_monitor_metric_alert",
+    "aws": "aws_cloudwatch_metric_alarm",
+    "google": "google_monitoring_alert_policy",
+}
+
 PROVIDERS_TF = """\
 terraform {{
   required_providers {{
