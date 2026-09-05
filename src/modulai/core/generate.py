@@ -167,11 +167,31 @@ def generate_module(
     files = [GeneratedFile(path=m.group(1), content=m.group(2)) for m in _FILE_BLOCK_RE.finditer(text)]
 
     if not files:
-        # Found live: this raised with zero diagnostic content on a real
-        # Gemini run, leaving no way to tell whether the model ignored the
-        # format, got truncated, or returned something else entirely.
-        # Showing a preview is the difference between "debuggable" and not.
-        preview = text[:1500] + ("... [truncated]" if len(text) > 1500 else "")
-        raise ValueError(f"Model response contained no <file> blocks — nothing to write. Response was:\n{preview}")
+        # Found live: a 1500-char preview wasn't enough to tell whether the
+        # tag was missing entirely or just didn't match the regex exactly
+        # (whitespace/newline variance across models is real) — that first
+        # real failure showed content from deep inside a file, meaning
+        # whatever preceded it (the opening tag, if present) was already
+        # past the preview window. Dump the full response to disk instead of
+        # guessing at a preview size, and report the one fact that actually
+        # distinguishes the two cases: does the literal tag string appear at all.
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
+            f.write(text)
+            dump_path = f.name
+
+        tag_index = text.find('<file path="')
+        tag_diagnosis = (
+            f"'<file path=\"' appears at character {tag_index} of {len(text)} total — "
+            "regex likely failed to match its exact formatting (see the dump)."
+            if tag_index != -1
+            else f"'<file path=\"' does not appear anywhere in the {len(text)}-character response — "
+            "the model didn't use the required format at all."
+        )
+        raise ValueError(
+            f"Model response contained no <file> blocks — nothing to write. "
+            f"{tag_diagnosis} Full response saved to {dump_path}"
+        )
 
     return files
