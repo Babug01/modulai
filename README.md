@@ -225,13 +225,14 @@ Built and tested incrementally; kept honest rather than aspirational.
 | `core/docs.py` (pinned docs fetch + settable-argument parsing) | **Yes, multi-cloud** | Live-tested against the real GitHub API for **azurerm, AWS, and GCP** — all three fetch correctly. `documented_argument_names()` covered by `tests/test_docs.py`, 4/4 passing, handling both azurerm's and AWS's heading/qualifier styles |
 | `core/schema.py` (schema introspection + input filtering) | **Yes, multi-cloud** | Live-tested against real `terraform` v1.16.1 for **azurerm and AWS** (GCP hit an unrelated, environment-specific binary-exec failure on this particular machine — not a code issue, since schema introspection is provider-agnostic by construction). `input_schema()` + `cross_reference_with_docs()` covered by `tests/test_schema.py`, 12/12 passing |
 | `core/generate.py` (the model call) | **Yes — full pipeline verified live via Gemini** | Real end-to-end run: `modulai generate azurerm_storage_account --model-provider google` on a real Windows machine, real free-tier Gemini key, real Terraform. Two real bugs found and fixed by that run — `finish_reason='length'` at 8000 max_tokens (raised to 32000) and a whole-resource-object output that failed Terraform's own sensitivity check (banned in the prompt, rule 8) — and after those fixes, **all 3 generated test scenarios pass for real**: `terraform test` → 3 passed, 0 failed. `fmt`/`init`/`validate` also passed. This is the actual proof the design works, not just that the pieces individually do |
-| `core/validate.py` (fmt/init/validate/test/checkov) | **Yes** | Live end-to-end against the hand-generated `azurerm_key_vault` module: `fmt`/`init`/`validate`/`test` (3/3 scenarios via `mock_provider`, zero cloud credentials) all pass; `checkov` (3.3.16) ran for real and found genuine findings |
+| `core/validate.py` (fmt/init/validate/test/checkov) | **Yes** | Live end-to-end, twice: once against a hand-generated `azurerm_key_vault` module (since removed — see below), and again against the real tool-generated `azurerm_storage_account` module referenced above. `fmt`/`init`/`validate`/`test` all pass in both; `checkov` found genuine findings in the first run (3.3.16) |
 | `mcp_server.py` | **No** | Needs the `mcp` package and a real MCP host to connect to |
 
-Two worked examples live in `examples/`: `terraform-azurerm-storage-account/`
-and `terraform-azurerm-key-vault/` — the latter is the one that actually
-passed the full live validation pipeline above, not just a description of
-what it should do.
+`examples/` is intentionally empty right now. The two modules that lived
+there earlier were hand-authored by Claude standing in for the model, not
+real tool output, and were removed rather than left in place implying
+otherwise. They'll be replaced with modules produced by an actual
+`modulai generate` run — real tool output, not a stand-in for it.
 
 ## License
 
