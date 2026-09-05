@@ -228,11 +228,23 @@ Built and tested incrementally; kept honest rather than aspirational.
 | `core/validate.py` (fmt/init/validate/test/checkov) | **Yes** | Live end-to-end, twice: once against a hand-generated `azurerm_key_vault` module (since removed — see below), and again against the real tool-generated `azurerm_storage_account` module referenced above. `fmt`/`init`/`validate`/`test` all pass in both; `checkov` found genuine findings in the first run (3.3.16) |
 | `mcp_server.py` | **No** | Needs the `mcp` package and a real MCP host to connect to |
 
-`examples/` is intentionally empty right now. The two modules that lived
-there earlier were hand-authored by Claude standing in for the model, not
-real tool output, and were removed rather than left in place implying
-otherwise. They'll be replaced with modules produced by an actual
-`modulai generate` run — real tool output, not a stand-in for it.
+`examples/terraform-azurerm-storage-account/` is the current example, and
+its provenance is worth stating precisely rather than glossing over: the
+prompt sent to it was built by calling `generate.py`'s own
+`USER_PROMPT_TEMPLATE`/`SYSTEM_PROMPT` against a live schema+docs fetch (real
+tool code, real live data) — but the response was written by Claude standing
+in for the model, not a live API call. What *is* real: that response was
+then parsed by `generate.py`'s actual `_FILE_BLOCK_RE` regex and written out
+by its actual file-writing logic, then run through the real
+`run_validation_pipeline` — `fmt`/`init`/`validate`/`test` (3/3 scenarios)
+all passed for real. This is meaningfully different from (and more rigorous
+than) the two hand-authored examples removed earlier, since the parsing and
+validation code paths are the tool's own, not reimplemented by hand — but it
+is still not the same claim as a genuine end-to-end run through a live
+model API. That distinct claim — `modulai generate azurerm_storage_account
+--model-provider google` via a real Gemini call — was also run once, by the
+maintainer, and passed all 3 test scenarios; see the `core/generate.py` row
+above.
 
 ## License
 
