@@ -2,9 +2,15 @@
 
     modulai generate azurerm_storage_account
     modulai generate azurerm_storage_account --provider-version 5.4.0 --out ./modules
+    modulai generate azurerm_storage_account --model-provider google       # Gemini free tier
+    modulai generate azurerm_storage_account --model-provider groq --model groq/llama-3.1-70b-versatile --api-key ...
+
+`--model-provider` isn't restricted to a fixed list — it's whatever litellm
+supports, addressed by name. anthropic/google/openai have a built-in default
+model; anything else needs `--model` given explicitly.
 
 Not runnable as-is in an environment without `terraform`, `checkov`, and the
-`anthropic`/`click`/`requests` packages installed — none of this has been
+`litellm`/`click`/`requests` packages installed — none of this has been
 executed end-to-end yet. See README.md's "Status" section.
 """
 
@@ -41,11 +47,11 @@ def main() -> None:
 @click.option("--out", "out_dir", default=None, help="Output directory. Defaults to ./terraform-<provider>-<resource>.")
 @click.option(
     "--model-provider",
-    type=click.Choice(["anthropic", "google"]),
     default="anthropic",
-    help="Which AI provider generates the module. 'google' uses Gemini's free tier (aistudio.google.com) — no billing needed.",
+    help="Which AI provider generates the module — any litellm-supported provider name (anthropic, google, openai, groq, mistral, ...), not restricted to a fixed list. 'google' is Gemini's free tier (aistudio.google.com) — no billing needed.",
 )
-@click.option("--api-key", default=None, help="Overrides the model provider's env var (ANTHROPIC_API_KEY or GOOGLE_API_KEY) for this run.")
+@click.option("--model", default=None, help="Exact litellm model string, e.g. 'groq/llama-3.1-70b-versatile'. Only needed for providers without a built-in default — see the error message if omitted.")
+@click.option("--api-key", default=None, help="Overrides the model provider's env var for this run. Required for providers modulai doesn't know a conventional env var name for.")
 @click.option("--skip-validate", is_flag=True, help="Skip the fmt/init/validate/test/checkov pipeline after generation.")
 def generate(
     resource_type: str,
@@ -53,6 +59,7 @@ def generate(
     provider_source: str,
     out_dir: str | None,
     model_provider: str,
+    model: str | None,
     api_key: str | None,
     skip_validate: bool,
 ) -> None:
@@ -110,6 +117,7 @@ def generate(
         alert_docs_markdown=alert_docs_markdown,
         provider_source=provider_source,
         model_provider=model_provider,
+        model=model,
     )
 
     resource_suffix = resource_type.removeprefix(f"{provider_name}_")

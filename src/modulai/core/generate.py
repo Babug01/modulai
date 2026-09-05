@@ -4,12 +4,20 @@ This is the one place a model call happens. Everything upstream (schema.py,
 docs.py) is deterministic and model-free by design — the model only sees
 already-verified structural facts, it never invents them.
 
-Two providers supported so testing doesn't require paid API access: Anthropic
-(BYOK, paid) and Google Gemini (BYOK, genuinely free tier via Google AI
-Studio — no billing account needed). The prompts are provider-agnostic;
-only the actual API call differs, isolated in _call_anthropic/_call_google
-below. Neither has been executed against a live API from this environment —
-this module is untested by design, since it never holds a key of its own.
+Not restricted to a hand-picked list of providers: the actual call goes
+through litellm, which normalizes 100+ providers (Anthropic, Gemini, OpenAI,
+Groq, Mistral, Bedrock, local Ollama, ...) behind one interface, addressed by
+a "<provider>/<model>" string — so whichever provider a user already has a
+key for works, not just the ones this file happens to hardcode. Verified
+live: litellm installs and imports cleanly, and its completion() signature
+has the model/messages/api_key/max_tokens parameters this code relies on.
+The DEFAULT_MODEL_BY_PROVIDER map below is only a convenience for the common
+case (--model-provider anthropic with no --model given) — pass --model
+explicitly for anything not in it.
+
+litellm's completion() call itself has not been executed against a live
+provider from this environment — needs a real key, by design, since this
+tool never holds one.
 """
 
 from __future__ import annotations
@@ -18,8 +26,9 @@ import re
 from dataclasses import dataclass
 
 DEFAULT_MODEL_BY_PROVIDER = {
-    "anthropic": "claude-sonnet-5",
-    "google": "gemini-2.5-flash",
+    "anthropic": "anthropic/claude-sonnet-5",
+    "google": "gemini/gemini-2.5-flash",
+    "openai": "openai/gpt-4o",
 }
 
 SYSTEM_PROMPT = """\
@@ -104,39 +113,19 @@ class GeneratedFile:
     content: str
 
 
-def _call_anthropic(api_key: str, model: str, system_prompt: str, user_prompt: str) -> str:
-    import anthropic  # lazy: only users of this provider need the package installed
+def _call_litellm(api_key: str, model: str, system_prompt: str, user_prompt: str) -> str:
+    import litellm  # lazy: only actually needed when generating, not for schema/docs/validate use
 
-    client = anthropic.Anthropic(api_key=api_key)
-    response = client.messages.create(
+    response = litellm.completion(
         model=model,
+        api_key=api_key,
         max_tokens=8000,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
     )
-    return "".join(block.text for block in response.content if block.type == "text")
-
-
-def _call_google(api_key: str, model: str, system_prompt: str, user_prompt: str) -> str:
-    from google import genai  # lazy: only users of this provider need the package installed
-    from google.genai import types
-
-    client = genai.Client(api_key=api_key)
-    response = client.models.generate_content(
-        model=model,
-        contents=user_prompt,
-        config=types.GenerateContentConfig(
-            system_instruction=system_prompt,
-            max_output_tokens=8000,
-        ),
-    )
-    return response.text
-
-
-_MODEL_CALLERS = {
-    "anthropic": _call_anthropic,
-    "google": _call_google,
-}
+    return response.choices[0].message.content
 
 
 def generate_module(
@@ -152,11 +141,14 @@ def generate_module(
     model_provider: str = "anthropic",
     model: str | None = None,
 ) -> list[GeneratedFile]:
-    caller = _MODEL_CALLERS.get(model_provider)
-    if caller is None:
-        raise ValueError(f"Unknown model_provider '{model_provider}' — supported: {', '.join(_MODEL_CALLERS)}")
+    resolved_model = model or DEFAULT_MODEL_BY_PROVIDER.get(model_provider)
+    if resolved_model is None:
+        raise ValueError(
+            f"No default model known for model_provider '{model_provider}' — "
+            f"pass --model explicitly as a litellm model string, e.g. 'groq/llama-3.1-70b-versatile'. "
+            f"Providers with a built-in default: {', '.join(DEFAULT_MODEL_BY_PROVIDER)}"
+        )
 
-    resolved_model = model or DEFAULT_MODEL_BY_PROVIDER[model_provider]
     user_prompt = USER_PROMPT_TEMPLATE.format(
         resource_type=resource_type,
         provider_source=provider_source,
@@ -168,7 +160,7 @@ def generate_module(
         alert_docs_markdown=alert_docs_markdown,
     )
 
-    text = caller(api_key, resolved_model, SYSTEM_PROMPT, user_prompt)
+    text = _call_litellm(api_key, resolved_model, SYSTEM_PROMPT, user_prompt)
     files = [GeneratedFile(path=m.group(1), content=m.group(2)) for m in _FILE_BLOCK_RE.finditer(text)]
 
     if not files:

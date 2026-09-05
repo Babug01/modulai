@@ -44,15 +44,21 @@ def generate_terraform_module(
     provider_source: str = "hashicorp/azurerm",
     out_dir: str = ".",
     model_provider: str = "anthropic",
+    model: str | None = None,
 ) -> str:
     """Generate a schema-grounded, tested Terraform module for one resource type.
 
     resource_type: e.g. 'azurerm_storage_account'.
     provider_version: exact version, e.g. '5.4.0'. Omit for latest.
     out_dir: directory to write the module into.
-    model_provider: 'anthropic' (reads ANTHROPIC_API_KEY) or 'google' (reads
-        GOOGLE_API_KEY — Gemini's free tier via aistudio.google.com, no
-        billing needed).
+    model_provider: any litellm-supported provider name (anthropic, google,
+        openai, groq, mistral, ...) — not restricted to a fixed list.
+        'google' is Gemini's free tier via aistudio.google.com, no billing
+        needed. Reads that provider's conventional env var
+        (ANTHROPIC_API_KEY / GOOGLE_API_KEY / OPENAI_API_KEY) unless a key
+        is supplied another way.
+    model: exact litellm model string, e.g. 'groq/llama-3.1-70b-versatile'.
+        Only needed for providers without a built-in default.
     """
     provider_name = provider_source.split("/")[-1]
 
@@ -90,6 +96,7 @@ def generate_terraform_module(
         alert_docs_markdown=alert_docs_markdown,
         provider_source=provider_source,
         model_provider=model_provider,
+        model=model,
     )
 
     from pathlib import Path
