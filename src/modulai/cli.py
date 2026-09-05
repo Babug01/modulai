@@ -27,6 +27,7 @@ from modulai.core.docs import deprecated_argument_names, documented_argument_nam
 from modulai.core.generate import generate_module
 from modulai.core.schema import (
     ALERT_RESOURCE_TYPE_BY_PROVIDER,
+    check_docs_coverage,
     cross_reference_with_docs,
     exclude_deprecated,
     fetch_provider_schema,
@@ -96,7 +97,9 @@ def generate(
     # Schema alone marks some attributes optional+computed despite them never
     # being real inputs (id, AWS's tags_all) — cross-reference against what's
     # actually documented as settable before this goes anywhere near the model.
+    pre_cross_reference_schema = filtered_schema
     filtered_schema = cross_reference_with_docs(filtered_schema, documented_argument_names(docs_markdown))
+    check_docs_coverage(pre_cross_reference_schema, filtered_schema, resource_type)
     # Then drop anything documented as settable but deprecated (found live:
     # most of aws_s3_bucket's arguments/blocks point to a separate dedicated
     # resource instead) — a freshly generated module should never expose a
@@ -108,7 +111,9 @@ def generate(
     raw_alert_schema = resource_schema(full_schema, alert_resource_type, provider_source)
     filtered_alert_schema = input_schema(raw_alert_schema)
     alert_docs_markdown = fetch_resource_doc(alert_resource_type, version, provider_name)
+    pre_cross_reference_alert_schema = filtered_alert_schema
     filtered_alert_schema = cross_reference_with_docs(filtered_alert_schema, documented_argument_names(alert_docs_markdown))
+    check_docs_coverage(pre_cross_reference_alert_schema, filtered_alert_schema, alert_resource_type)
     filtered_alert_schema = exclude_deprecated(filtered_alert_schema, deprecated_argument_names(alert_docs_markdown))
     alert_schema_json = json.dumps(filtered_alert_schema)
 

@@ -5,7 +5,16 @@ azurerm_storage_account schema at v5.4.0 during development: 102 top-level
 attributes, only 28 of them true inputs, the rest computed-only exports.
 """
 
-from modulai.core.schema import ALERT_RESOURCE_TYPE_BY_PROVIDER, cross_reference_with_docs, exclude_deprecated, input_schema
+import pytest
+
+from modulai.core.schema import (
+    ALERT_RESOURCE_TYPE_BY_PROVIDER,
+    SuspiciousDocCoverageError,
+    check_docs_coverage,
+    cross_reference_with_docs,
+    exclude_deprecated,
+    input_schema,
+)
 
 
 def test_alert_resource_type_is_cloud_specific_not_hardcoded_to_azure():
@@ -179,3 +188,46 @@ def test_exclude_deprecated_with_empty_set_is_a_no_op():
     result = exclude_deprecated(DEPRECATED_FIXTURE, set())
     assert set(result["attributes"]) == {"bucket", "acl"}
     assert set(result["block_types"]) == {"versioning", "logging"}
+
+
+# check_docs_coverage: guards against documented_argument_names() silently
+# mis-parsing a doc format it wasn't built for (found live on kubernetes/helm's
+# tfplugindocs-generated docs — see schema.py's docstring for the real numbers).
+def test_check_docs_coverage_passes_when_most_inputs_survive():
+    before = {"attributes": {"a": {}, "b": {}, "c": {}, "d": {}}, "block_types": {}}
+    after = {"attributes": {"a": {}, "b": {}, "c": {}}, "block_types": {}}
+    check_docs_coverage(before, after, "test_resource")  # should not raise
+
+
+def test_check_docs_coverage_raises_when_nearly_everything_dropped():
+    # Mirrors kubernetes_deployment: documented_argument_names() returns zero
+    # names, so cross_reference_with_docs strips every attribute.
+    before = {"attributes": {"a": {}, "b": {}, "c": {}, "d": {}}, "block_types": {}}
+    after = {"attributes": {}, "block_types": {}}
+    with pytest.raises(SuspiciousDocCoverageError):
+        check_docs_coverage(before, after, "test_resource")
+
+
+def test_check_docs_coverage_counts_nested_blocks_recursively():
+    # The real kubernetes_deployment case: almost nothing lives at the top
+    # level (mostly nested blocks) — the drop only shows up if nested
+    # attributes are counted too, not just the top-level ones.
+    before = {
+        "attributes": {"top": {}},
+        "block_types": {"spec": {"block": {"attributes": {"x": {}, "y": {}, "z": {}}, "block_types": {}}}},
+    }
+    after = {
+        "attributes": {},
+        "block_types": {"spec": {"block": {"attributes": {}, "block_types": {}}}},
+    }
+    with pytest.raises(SuspiciousDocCoverageError):
+        check_docs_coverage(before, after, "test_resource")
+
+
+def test_check_docs_coverage_skips_tiny_resources():
+    # Below the size floor — a resource this small could legitimately lose
+    # half its attributes to a real tags_all-style exclusion, not a parsing
+    # mismatch, so the check doesn't apply.
+    before = {"attributes": {"a": {}, "b": {}}, "block_types": {}}
+    after = {"attributes": {}, "block_types": {}}
+    check_docs_coverage(before, after, "test_resource")  # should not raise

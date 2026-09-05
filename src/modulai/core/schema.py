@@ -189,3 +189,43 @@ def exclude_deprecated(filtered: dict, deprecated_names: set[str]) -> dict:
         if name not in deprecated_names
     }
     return {"attributes": attributes, "block_types": block_types}
+
+
+class SuspiciousDocCoverageError(RuntimeError):
+    pass
+
+
+def _count_attributes(block: dict) -> int:
+    return len(block["attributes"]) + sum(_count_attributes(bt["block"]) for bt in block["block_types"].values())
+
+
+def check_docs_coverage(before: dict, after: dict, resource_type: str) -> None:
+    """Guard against documented_argument_names() silently mis-parsing a doc
+    format it wasn't built for. Found live: HashiCorp's newer
+    tfplugindocs-generated docs (kubernetes, helm, and presumably other
+    actively-maintained providers) use a completely different heading/bullet
+    convention than the legacy azurerm/AWS-style docs this parser targets —
+    parsing them returns zero names for kubernetes_deployment, and a handful
+    of spurious ones for helm_release. cross_reference_with_docs() then
+    silently drops nearly every real input with no error at all, producing a
+    module that looks like it generated fine but is empty or badly wrong.
+
+    This can't prove the docs format is unrecognized — a resource could
+    legitimately have very few real inputs — but losing more than half of a
+    non-trivial attribute count is a far likelier sign of a parsing mismatch
+    than a real resource shape. Threshold picked from real data: azurerm and
+    AWS resources verified so far lose under 10% of their (recursively
+    counted, across all nested blocks) attributes to this step; the two
+    known-broken cases lose 97-100%.
+    """
+    before_count = _count_attributes(before)
+    after_count = _count_attributes(after)
+    if before_count >= 3 and after_count < before_count * 0.5:
+        raise SuspiciousDocCoverageError(
+            f"{resource_type}: cross-referencing against the provider docs kept only "
+            f"{after_count} of {before_count} real-looking inputs (counted recursively, "
+            "across all nested blocks). This usually means the docs use a format "
+            "documented_argument_names() doesn't recognize (seen live on kubernetes/"
+            "helm's tfplugindocs-generated docs), not that the resource genuinely has "
+            "this few inputs. Refusing to generate a likely-broken module."
+        )
