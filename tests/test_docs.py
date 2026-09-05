@@ -1,11 +1,12 @@
-"""documented_argument_names() parsing, tested against synthetic doc snippets
-covering the two real bullet/heading formats found live: azurerm's plural
-"Arguments Reference" / "Attributes Reference" with bare "(Optional)", and
-AWS's singular "Argument Reference" / "Attribute Reference" with compound
-qualifiers like "(Optional, Forces new resource)".
+"""documented_argument_names()/deprecated_argument_names() parsing, tested
+against synthetic doc snippets covering the two real bullet/heading formats
+found live: azurerm's plural "Arguments Reference" / "Attributes Reference"
+with bare "(Optional)", and AWS's singular "Argument Reference" /
+"Attribute Reference" with compound qualifiers like "(Optional, Forces new
+resource)" and "(Optional, **Deprecated**)".
 """
 
-from modulai.core.docs import documented_argument_names
+from modulai.core.docs import deprecated_argument_names, documented_argument_names
 
 AZURERM_STYLE_DOC = """
 ## Arguments Reference
@@ -70,3 +71,17 @@ def test_aws_style_singular_heading_excludes_attributes_section():
     names = documented_argument_names(AWS_STYLE_DOC)
     assert "arn" not in names
     assert "tags_all" not in names
+
+
+def test_deprecated_argument_is_flagged():
+    # acl is "(Optional, **Deprecated**)" in the fixture above.
+    assert deprecated_argument_names(AWS_STYLE_DOC) == {"acl"}
+
+
+def test_non_deprecated_argument_is_not_flagged():
+    # bucket is "(Optional, Forces new resource)" — no Deprecated marker.
+    assert "bucket" not in deprecated_argument_names(AWS_STYLE_DOC)
+
+
+def test_azurerm_style_doc_with_no_deprecated_args_returns_empty_set():
+    assert deprecated_argument_names(AZURERM_STYLE_DOC) == set()

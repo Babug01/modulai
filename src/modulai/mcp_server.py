@@ -23,11 +23,12 @@ import json
 from mcp.server.fastmcp import FastMCP
 
 from modulai.core.auth import resolve_api_key
-from modulai.core.docs import documented_argument_names, fetch_resource_doc, latest_provider_version
+from modulai.core.docs import deprecated_argument_names, documented_argument_names, fetch_resource_doc, latest_provider_version
 from modulai.core.generate import generate_module
 from modulai.core.schema import (
     ALERT_RESOURCE_TYPE_BY_PROVIDER,
     cross_reference_with_docs,
+    exclude_deprecated,
     fetch_provider_schema,
     input_schema,
     resource_schema,
@@ -77,12 +78,14 @@ def generate_terraform_module(
     filtered_schema = input_schema(raw_resource_schema)
     docs_markdown = fetch_resource_doc(resource_type, version, provider_name)
     filtered_schema = cross_reference_with_docs(filtered_schema, documented_argument_names(docs_markdown))
+    filtered_schema = exclude_deprecated(filtered_schema, deprecated_argument_names(docs_markdown))
     resource_schema_json = json.dumps(filtered_schema)
 
     raw_alert_schema = resource_schema(full_schema, alert_resource_type, provider_source)
     filtered_alert_schema = input_schema(raw_alert_schema)
     alert_docs_markdown = fetch_resource_doc(alert_resource_type, version, provider_name)
     filtered_alert_schema = cross_reference_with_docs(filtered_alert_schema, documented_argument_names(alert_docs_markdown))
+    filtered_alert_schema = exclude_deprecated(filtered_alert_schema, deprecated_argument_names(alert_docs_markdown))
     alert_schema_json = json.dumps(filtered_alert_schema)
 
     files = generate_module(

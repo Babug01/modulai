@@ -25,6 +25,14 @@ _ARG_BULLET_RE = re.compile(r"^\*\s+`([a-zA-Z0-9_]+)`\s+-\s+\((?:Required|Option
 # "Argument Reference" — found live, checking both providers' actual docs.
 _ATTRIBUTES_HEADING_RE = re.compile(r"^## .*Attributes? Reference", re.MULTILINE)
 
+# Matches the same bullet as _ARG_BULLET_RE but only when its qualifier includes
+# **Deprecated** — found live on aws_s3_bucket: most of its arguments/blocks
+# (cors_rule, versioning, lifecycle_rule, logging, acl, ...) are marked exactly
+# this way in the docs, with AWS steering users to a separate dedicated resource
+# instead. The schema itself doesn't mark nested blocks deprecated (only some
+# top-level attributes do), so the docs are the only reliable signal for this.
+_DEPRECATED_BULLET_RE = re.compile(r"^\*\s+`([a-zA-Z0-9_]+)`\s+-\s+\((?:Required|Optional)[^)]*\*\*Deprecated\*\*", re.MULTILINE)
+
 
 def latest_provider_version(provider: str = "azurerm") -> str:
     """Return the latest published version tag (e.g. '5.4.0'), no leading 'v'."""
@@ -68,3 +76,15 @@ def documented_argument_names(doc_markdown: str) -> set[str]:
     heading = _ATTRIBUTES_HEADING_RE.search(doc_markdown)
     scoped = doc_markdown[: heading.start()] if heading else doc_markdown
     return set(_ARG_BULLET_RE.findall(scoped))
+
+
+def deprecated_argument_names(doc_markdown: str) -> set[str]:
+    """Names documented as settable but marked **Deprecated** — a freshly
+    generated module should never expose these as first-class variables,
+    since the provider itself is telling users to use something else instead.
+    Subtract this from documented_argument_names()'s result (via
+    schema.exclude_deprecated) before anything reaches the model.
+    """
+    heading = _ATTRIBUTES_HEADING_RE.search(doc_markdown)
+    scoped = doc_markdown[: heading.start()] if heading else doc_markdown
+    return set(_DEPRECATED_BULLET_RE.findall(scoped))

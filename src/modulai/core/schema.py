@@ -163,3 +163,23 @@ def cross_reference_with_docs(filtered: dict, documented_names: set[str]) -> dic
         for name, bt in filtered["block_types"].items()
     }
     return {"attributes": attributes, "block_types": block_types}
+
+
+def exclude_deprecated(filtered: dict, deprecated_names: set[str]) -> dict:
+    """Drop any attribute OR whole nested block whose name is documented as
+    **Deprecated** (see docs.deprecated_argument_names), at every nesting
+    level. A deprecated block is dropped entirely, not recursed into — found
+    live on aws_s3_bucket: nearly every block (cors_rule, versioning,
+    lifecycle_rule, logging, replication_configuration, ...) is deprecated in
+    favor of a separate dedicated resource, and the schema itself doesn't
+    mark nested blocks deprecated the way it does some top-level attributes,
+    so this has to run after the docs-based deprecated-name lookup, not
+    instead of it.
+    """
+    attributes = {name: attr for name, attr in filtered["attributes"].items() if name not in deprecated_names}
+    block_types = {
+        name: {**bt, "block": exclude_deprecated(bt["block"], deprecated_names)}
+        for name, bt in filtered["block_types"].items()
+        if name not in deprecated_names
+    }
+    return {"attributes": attributes, "block_types": block_types}

@@ -5,7 +5,7 @@ azurerm_storage_account schema at v5.4.0 during development: 102 top-level
 attributes, only 28 of them true inputs, the rest computed-only exports.
 """
 
-from modulai.core.schema import ALERT_RESOURCE_TYPE_BY_PROVIDER, cross_reference_with_docs, input_schema
+from modulai.core.schema import ALERT_RESOURCE_TYPE_BY_PROVIDER, cross_reference_with_docs, exclude_deprecated, input_schema
 
 
 def test_alert_resource_type_is_cloud_specific_not_hardcoded_to_azure():
@@ -122,3 +122,60 @@ def test_cross_reference_applies_inside_nested_blocks():
     cross_referenced = cross_reference_with_docs(filtered, DOCUMENTED_NAMES)
     identity_attrs = cross_referenced["block_types"]["identity"]["block"]["attributes"]
     assert set(identity_attrs) == {"type", "identity_ids"}
+
+
+# Mirrors the real aws_s3_bucket shape: a deprecated top-level scalar (acl)
+# alongside a deprecated whole nested block (versioning) that still has its
+# own non-deprecated-looking inner attributes — proving exclude_deprecated
+# drops the block wholesale instead of recursing into it and keeping those.
+DEPRECATED_FIXTURE = {
+    "attributes": {
+        "bucket": {"type": "string", "optional": True},
+        "acl": {"type": "string", "optional": True},
+    },
+    "block_types": {
+        "versioning": {
+            "nesting_mode": "list",
+            "min_items": 0,
+            "max_items": 1,
+            "block": {
+                "attributes": {"enabled": {"type": "bool", "optional": True}},
+                "block_types": {},
+            },
+        },
+        "logging": {
+            "nesting_mode": "list",
+            "min_items": 0,
+            "max_items": 1,
+            "block": {
+                "attributes": {"target_bucket": {"type": "string", "required": True}},
+                "block_types": {},
+            },
+        },
+    },
+}
+
+DEPRECATED_NAMES = {"acl", "versioning"}
+
+
+def test_exclude_deprecated_drops_top_level_attribute():
+    result = exclude_deprecated(DEPRECATED_FIXTURE, DEPRECATED_NAMES)
+    assert "acl" not in result["attributes"]
+    assert "bucket" in result["attributes"]
+
+
+def test_exclude_deprecated_drops_whole_nested_block_without_recursing():
+    result = exclude_deprecated(DEPRECATED_FIXTURE, DEPRECATED_NAMES)
+    assert "versioning" not in result["block_types"]
+
+
+def test_exclude_deprecated_keeps_non_deprecated_block():
+    result = exclude_deprecated(DEPRECATED_FIXTURE, DEPRECATED_NAMES)
+    assert "logging" in result["block_types"]
+    assert set(result["block_types"]["logging"]["block"]["attributes"]) == {"target_bucket"}
+
+
+def test_exclude_deprecated_with_empty_set_is_a_no_op():
+    result = exclude_deprecated(DEPRECATED_FIXTURE, set())
+    assert set(result["attributes"]) == {"bucket", "acl"}
+    assert set(result["block_types"]) == {"versioning", "logging"}
