@@ -39,13 +39,20 @@ def main() -> None:
 @click.option("--provider-version", default=None, help="Exact provider version, e.g. 5.4.0. Defaults to latest.")
 @click.option("--provider-source", default="hashicorp/azurerm", help="Provider source address.")
 @click.option("--out", "out_dir", default=None, help="Output directory. Defaults to ./terraform-<provider>-<resource>.")
-@click.option("--api-key", default=None, help="Overrides ANTHROPIC_API_KEY for this run.")
+@click.option(
+    "--model-provider",
+    type=click.Choice(["anthropic", "google"]),
+    default="anthropic",
+    help="Which AI provider generates the module. 'google' uses Gemini's free tier (aistudio.google.com) — no billing needed.",
+)
+@click.option("--api-key", default=None, help="Overrides the model provider's env var (ANTHROPIC_API_KEY or GOOGLE_API_KEY) for this run.")
 @click.option("--skip-validate", is_flag=True, help="Skip the fmt/init/validate/test/checkov pipeline after generation.")
 def generate(
     resource_type: str,
     provider_version: str | None,
     provider_source: str,
     out_dir: str | None,
+    model_provider: str,
     api_key: str | None,
     skip_validate: bool,
 ) -> None:
@@ -62,7 +69,7 @@ def generate(
         sys.exit(1)
 
     try:
-        key = resolve_api_key(api_key)
+        key = resolve_api_key(api_key, model_provider)
     except MissingApiKeyError as e:
         click.echo(str(e), err=True)
         sys.exit(1)
@@ -102,6 +109,7 @@ def generate(
         alert_schema_json=alert_schema_json,
         alert_docs_markdown=alert_docs_markdown,
         provider_source=provider_source,
+        model_provider=model_provider,
     )
 
     resource_suffix = resource_type.removeprefix(f"{provider_name}_")

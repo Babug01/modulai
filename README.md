@@ -9,8 +9,10 @@ a model's memory of them, with generated tests and a security scan already
 run against the output before you ever see it.
 
 No hosting, no account with us, no server to operate. It's BYOK — every
-generation call uses your own Anthropic API key, run entirely on your own
-machine.
+generation call uses your own API key, run entirely on your own machine.
+Two providers are supported, your choice: **Anthropic** (paid) or **Google
+Gemini** (genuinely free tier via Google AI Studio — no billing account
+needed, just a personal Google account).
 
 ---
 
@@ -20,15 +22,18 @@ machine.
 |---|---|
 | **Terraform >= 1.7** | Schema introspection (`terraform providers schema -json`) and the generated tests' `mock_provider` support both need this version or later |
 | **Python >= 3.10** | Runtime for the CLI/MCP server |
-| **An Anthropic API key** | Yours — billed to your own account, never stored or transmitted anywhere except directly to Anthropic's API for the current run |
+| **An API key for one provider** | Anthropic (billed) or Google (free tier, no card needed at aistudio.google.com) — yours, never stored or transmitted anywhere except directly to that provider's API for the current run |
 | **Checkov** *(optional)* | The security-scan step. Skippable with `--skip-validate`, or the pipeline just reports that step as failed/missing rather than blocking generation |
 
 ## Install
 
 ```bash
-pip install -e ".[dev,mcp]"
+pip install -e ".[dev,mcp,anthropic]"   # if using Anthropic
+pip install -e ".[dev,mcp,google]"      # if using Gemini's free tier
 ```
 
+Only install the provider you're actually going to use — `anthropic` and
+`google` are separate optional extras, not bundled with the base install.
 This installs two console scripts: `modulai` (the CLI) and `modulai-mcp`
 (the MCP server). `[mcp]` is only needed if you plan to use the MCP server;
 omit it for CLI-only use.
@@ -57,6 +62,16 @@ default provider. For AWS or GCP, say so explicitly:
 modulai generate aws_s3_bucket --provider-source hashicorp/aws
 modulai generate google_storage_bucket --provider-source hashicorp/google
 ```
+
+**Using Gemini's free tier instead** (no billing account needed at all):
+
+```bash
+export GOOGLE_API_KEY=...     # from aistudio.google.com — free, no card required
+modulai generate azurerm_storage_account --model-provider google
+```
+
+`--model-provider` accepts `anthropic` (default) or `google`; `--api-key`
+overrides whichever env var that provider reads for a single run.
 
 What happens, in order: pin the exact provider version → fetch its real
 schema via `terraform init` + `providers schema -json` → fetch its real docs
@@ -98,7 +113,8 @@ editor assistant already gets this for free once registered:
 | `--provider-version` / `provider_version` | flag / MCP param | No | latest published release | Exact version only (e.g. `5.4.0`), never a range — see the versioning policy below |
 | `--provider-source` / `provider_source` | flag / MCP param | No | `hashicorp/azurerm` | Must be overridden for AWS (`hashicorp/aws`) or GCP (`hashicorp/google`) — see restrictions |
 | `--out` / `out_dir` | flag / MCP param | No | `./terraform-<provider>-<resource>` | Output directory |
-| `--api-key` | CLI flag only | No | `$ANTHROPIC_API_KEY` | Overrides the env var for a single run; the MCP server only reads the env var, by design (no key is ever passed through a conversation) |
+| `--model-provider` / `model_provider` | flag / MCP param | No | `anthropic` | `anthropic` or `google` — which AI provider generates the module. `google` uses Gemini's free tier |
+| `--api-key` | CLI flag only | No | `$ANTHROPIC_API_KEY` or `$GOOGLE_API_KEY`, matching `--model-provider` | Overrides the env var for a single run; the MCP server only reads the env var, by design (no key is ever passed through a conversation) |
 | `--skip-validate` | CLI flag only | No | off | Skips the fmt/init/validate/test/checkov pass entirely |
 
 **No other input is accepted, deliberately** — the whole point is that a
@@ -187,10 +203,10 @@ Built and tested incrementally; kept honest rather than aspirational.
 
 | Module | Verified | How |
 |---|---|---|
-| `core/auth.py` (BYOK key resolution) | **Yes** | `tests/test_auth.py`, 3/3 passing |
+| `core/auth.py` (BYOK key resolution) | **Yes, multi-provider** | `tests/test_auth.py`, 6/6 passing — including that each provider only reads its own env var (`ANTHROPIC_API_KEY` / `GOOGLE_API_KEY`), never the other's |
 | `core/docs.py` (pinned docs fetch + settable-argument parsing) | **Yes, multi-cloud** | Live-tested against the real GitHub API for **azurerm, AWS, and GCP** — all three fetch correctly. `documented_argument_names()` covered by `tests/test_docs.py`, 4/4 passing, handling both azurerm's and AWS's heading/qualifier styles |
 | `core/schema.py` (schema introspection + input filtering) | **Yes, multi-cloud** | Live-tested against real `terraform` v1.16.1 for **azurerm and AWS** (GCP hit an unrelated, environment-specific binary-exec failure on this particular machine — not a code issue, since schema introspection is provider-agnostic by construction). `input_schema()` + `cross_reference_with_docs()` covered by `tests/test_schema.py`, 12/12 passing |
-| `core/generate.py` (the model call) | **Partially** | The SDK call itself needs a real API key and hasn't been run here by design. Its *rules* were exercised by hand-generating a real `azurerm_key_vault` module against this exact system prompt, which then passed the full pipeline below |
+| `core/generate.py` (the model call) | **Partially, Anthropic path only** | Neither the Anthropic nor Google code path has been run against a live API from this environment — both need a real key, by design, since this tool never holds one. Anthropic's *rules* were exercised by hand-generating a real `azurerm_key_vault` module against this exact system prompt, which then passed the full pipeline below. The Google/Gemini code path is written and importable (verified: loads cleanly with no provider SDK installed, rejects unknown providers before any network call) but has not been run against the real Gemini API yet |
 | `core/validate.py` (fmt/init/validate/test/checkov) | **Yes** | Live end-to-end against the hand-generated `azurerm_key_vault` module: `fmt`/`init`/`validate`/`test` (3/3 scenarios via `mock_provider`, zero cloud credentials) all pass; `checkov` (3.3.16) ran for real and found genuine findings |
 | `mcp_server.py` | **No** | Needs the `mcp` package and a real MCP host to connect to |
 

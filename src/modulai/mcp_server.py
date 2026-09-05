@@ -43,12 +43,16 @@ def generate_terraform_module(
     provider_version: str | None = None,
     provider_source: str = "hashicorp/azurerm",
     out_dir: str = ".",
+    model_provider: str = "anthropic",
 ) -> str:
     """Generate a schema-grounded, tested Terraform module for one resource type.
 
     resource_type: e.g. 'azurerm_storage_account'.
     provider_version: exact version, e.g. '5.4.0'. Omit for latest.
     out_dir: directory to write the module into.
+    model_provider: 'anthropic' (reads ANTHROPIC_API_KEY) or 'google' (reads
+        GOOGLE_API_KEY — Gemini's free tier via aistudio.google.com, no
+        billing needed).
     """
     provider_name = provider_source.split("/")[-1]
 
@@ -59,7 +63,7 @@ def generate_terraform_module(
             f"supported: {', '.join(ALERT_RESOURCE_TYPE_BY_PROVIDER)}"
         )
 
-    key = resolve_api_key()
+    key = resolve_api_key(model_provider=model_provider)
     version = provider_version or latest_provider_version(provider_name)
 
     full_schema = fetch_provider_schema(version=version, provider_source=provider_source, provider_source_name=provider_name)
@@ -85,6 +89,7 @@ def generate_terraform_module(
         alert_schema_json=alert_schema_json,
         alert_docs_markdown=alert_docs_markdown,
         provider_source=provider_source,
+        model_provider=model_provider,
     )
 
     from pathlib import Path
