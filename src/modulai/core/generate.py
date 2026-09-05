@@ -27,7 +27,10 @@ from dataclasses import dataclass
 
 DEFAULT_MODEL_BY_PROVIDER = {
     "anthropic": "anthropic/claude-sonnet-5",
-    "google": "gemini/gemini-2.5-flash",
+    # gemini-2.5-flash was retired for new users as of live testing (Sept 2026)
+    # — Google's own 404 response named gemini-3.6-flash as the replacement.
+    # Model names drift; override with --model if this one goes stale too.
+    "google": "gemini/gemini-3.6-flash",
     "openai": "openai/gpt-4o",
 }
 
