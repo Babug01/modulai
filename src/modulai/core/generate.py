@@ -85,6 +85,14 @@ these non-negotiable rules:
    a curated per-resource menu (that needs grounding this tool doesn't have yet). \
    Document in the README, explicitly, that `null` or omitting the variable both \
    mean "no alerts."
+8. outputs.tf: every output is an individually named, curated value — the same \
+   discipline as rule 2's variables, applied to outputs. NEVER emit a single output \
+   that dumps an entire resource object (e.g. `output "resource" { value = \
+   azurerm_storage_account.this }`) — found live: this fails Terraform's own \
+   sensitive-value check the moment the resource has ANY sensitive attribute \
+   anywhere in it, since the whole object inherits that sensitivity, and it defeats \
+   the point of curated outputs regardless. Mark an individual output `sensitive = \
+   true` whenever its value is a credential, key, connection string, or password.
 
 Output each file wrapped exactly like this, one block per file, nothing else \
 outside the blocks:
