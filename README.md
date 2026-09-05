@@ -33,6 +33,12 @@ This installs two console scripts: `modulai` (the CLI) and `modulai-mcp`
 (the MCP server). `[mcp]` is only needed if you plan to use the MCP server;
 omit it for CLI-only use.
 
+**If `modulai` fails to launch at all** (`Access is denied` / `ResourceUnavailable` trying to start `modulai.exe`) — found live, on a locked-down Windows machine: some AV/EDR software blocks freshly pip-created `.exe` launcher stubs from running, even though `python.exe` itself runs fine. Use `python -m modulai` instead of the bare `modulai` command — same CLI, routes through `python.exe` directly instead of the stub:
+
+```bash
+python -m modulai generate azurerm_storage_account
+```
+
 ---
 
 ## How to run it
