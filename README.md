@@ -222,29 +222,50 @@ Built and tested incrementally; kept honest rather than aspirational.
 | Module | Verified | How |
 |---|---|---|
 | `core/auth.py` (BYOK key resolution) | **Yes, any provider** | `tests/test_auth.py`, 8/8 passing — including that known providers only read their own env var (`ANTHROPIC_API_KEY`/`GOOGLE_API_KEY`/`OPENAI_API_KEY`, never cross-reading), and that an unrecognized provider name still works correctly when a key is passed explicitly |
-| `core/docs.py` (pinned docs fetch + settable-argument parsing) | **Yes, multi-cloud** | Live-tested against the real GitHub API for **azurerm, AWS, and GCP** — all three fetch correctly. `documented_argument_names()` covered by `tests/test_docs.py`, 4/4 passing, handling both azurerm's and AWS's heading/qualifier styles |
-| `core/schema.py` (schema introspection + input filtering) | **Yes, multi-cloud** | Live-tested against real `terraform` v1.16.1 for **azurerm and AWS** (GCP hit an unrelated, environment-specific binary-exec failure on this particular machine — not a code issue, since schema introspection is provider-agnostic by construction). `input_schema()` + `cross_reference_with_docs()` covered by `tests/test_schema.py`, 12/12 passing |
+| `core/docs.py` (pinned docs fetch + settable-argument + deprecated-argument parsing) | **Yes, multi-cloud** | Live-tested against the real GitHub API for **azurerm, AWS, and GCP** — all three fetch correctly. `tests/test_docs.py`, 9/9 passing, covering `documented_argument_names()` (both azurerm's and AWS's heading/qualifier styles) and `deprecated_argument_names()`, including a real collision found live on `aws_s3_bucket`: the same argument name (`object_lock_enabled`) appears twice in the doc — once current, once inside a different, deprecated nested block's own section — resolved by only treating a name as deprecated when *every* occurrence of it says so |
+| `core/schema.py` (schema introspection + input filtering) | **Yes, multi-cloud** | Live-tested against real `terraform` v1.16.1 for **azurerm and AWS** (GCP hit an unrelated, environment-specific binary-exec failure on this particular machine — not a code issue, since schema introspection is provider-agnostic by construction). `input_schema()`, `cross_reference_with_docs()`, and `exclude_deprecated()` covered by `tests/test_schema.py`, 14/14 passing |
 | `core/generate.py` (the model call) | **Yes — full pipeline verified live via Gemini** | Real end-to-end run: `modulai generate azurerm_storage_account --model-provider google` on a real Windows machine, real free-tier Gemini key, real Terraform. Two real bugs found and fixed by that run — `finish_reason='length'` at 8000 max_tokens (raised to 32000) and a whole-resource-object output that failed Terraform's own sensitivity check (banned in the prompt, rule 8) — and after those fixes, **all 3 generated test scenarios pass for real**: `terraform test` → 3 passed, 0 failed. `fmt`/`init`/`validate` also passed. This is the actual proof the design works, not just that the pieces individually do |
 | `core/validate.py` (fmt/init/validate/test/checkov) | **Yes** | Live end-to-end, twice: once against a hand-generated `azurerm_key_vault` module (since removed — see below), and again against the real tool-generated `azurerm_storage_account` module referenced above. `fmt`/`init`/`validate`/`test` all pass in both; `checkov` found genuine findings in the first run (3.3.16) |
 | `mcp_server.py` | **No** | Needs the `mcp` package and a real MCP host to connect to |
 
-`examples/terraform-azurerm-storage-account/` is the current example, and
-its provenance is worth stating precisely rather than glossing over: the
-prompt sent to it was built by calling `generate.py`'s own
+`examples/terraform-azurerm-storage-account/` and
+`examples/terraform-aws-s3-bucket/` are the current examples, and their
+provenance is worth stating precisely rather than glossing over: each
+prompt was built by calling `generate.py`'s own
 `USER_PROMPT_TEMPLATE`/`SYSTEM_PROMPT` against a live schema+docs fetch (real
 tool code, real live data) — but the response was written by Claude standing
-in for the model, not a live API call. What *is* real: that response was
+in for the model, not a live API call. What *is* real: each response was
 then parsed by `generate.py`'s actual `_FILE_BLOCK_RE` regex and written out
 by its actual file-writing logic, then run through the real
-`run_validation_pipeline` — `fmt`/`init`/`validate`/`test` (3/3 scenarios)
-all passed for real. This is meaningfully different from (and more rigorous
-than) the two hand-authored examples removed earlier, since the parsing and
-validation code paths are the tool's own, not reimplemented by hand — but it
-is still not the same claim as a genuine end-to-end run through a live
-model API. That distinct claim — `modulai generate azurerm_storage_account
---model-provider google` via a real Gemini call — was also run once, by the
-maintainer, and passed all 3 test scenarios; see the `core/generate.py` row
-above.
+`run_validation_pipeline` — `fmt`/`init`/`validate`/`test` all passed for
+real (3/3 scenarios for both examples). This is meaningfully different from
+(and more rigorous than) the two hand-authored examples removed earlier,
+since the parsing and validation code paths are the tool's own, not
+reimplemented by hand — but it is still not the same claim as a genuine
+end-to-end run through a live model API. That distinct claim — `modulai
+generate azurerm_storage_account --model-provider google` via a real Gemini
+call — was also run once, by the maintainer, and passed all 3 test
+scenarios; see the `core/generate.py` row above.
+
+The AWS example is also what surfaced both fixes described in the
+`core/docs.py`/`core/schema.py` rows above: `aws_s3_bucket`'s real docs mark
+nearly every classic feature (versioning, encryption, lifecycle, logging,
+replication, CORS, website, ACLs/grants) **Deprecated** in favor of a
+separate dedicated resource, and one deprecated-vs-current name collision
+(`object_lock_enabled`) on top of that — both found by actually running the
+real fetch-and-filter pipeline against live data, not by inspection. The
+generated module reflects the fixed pipeline: only the 7 arguments still
+current survive into `variables.tf`.
+
+GCP wasn't generated as a third example: `terraform providers schema -json`
+against the GCP provider fails in this sandbox specifically with a fork/exec
+"Access is denied" on the downloaded provider binary — confirmed
+non-transient (retried explicitly), and specific to this environment, since
+`core/schema.py`'s schema-fetch logic is provider-agnostic by construction
+and already works for azurerm and AWS. Generating the GCP example needs
+either a different environment or the maintainer's own machine (which has
+already run `generate.py` end-to-end successfully once, for the Gemini
+verification above).
 
 ## License
 
