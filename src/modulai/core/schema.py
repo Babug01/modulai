@@ -76,9 +76,15 @@ def fetch_provider_schema(
             encoding="utf-8",
         )
 
+        # encoding="utf-8" is required, not cosmetic — found live on the
+        # kubernetes provider: without it, subprocess.run(text=True) decodes
+        # with the OS default (cp1252 on this Windows machine), and a schema
+        # containing any byte outside that range crashes the decode outright
+        # (schema.stdout ends up None, not just mangled text). azurerm/aws/
+        # google never happened to trip this, but it was always latent.
         init = subprocess.run(
             [terraform_bin, "init", "-input=false", "-backend=false"],
-            cwd=tf_dir, capture_output=True, text=True, timeout=120,
+            cwd=tf_dir, capture_output=True, text=True, encoding="utf-8", timeout=120,
         )
         if init.returncode != 0:
             raise SchemaFetchError(
@@ -87,7 +93,7 @@ def fetch_provider_schema(
 
         schema = subprocess.run(
             [terraform_bin, "providers", "schema", "-json"],
-            cwd=tf_dir, capture_output=True, text=True, timeout=60,
+            cwd=tf_dir, capture_output=True, text=True, encoding="utf-8", timeout=60,
         )
         if schema.returncode != 0:
             raise SchemaFetchError(f"providers schema -json failed:\n{schema.stderr}")
