@@ -33,6 +33,18 @@ _ATTRIBUTES_HEADING_RE = re.compile(r"^## .*Attributes? Reference", re.MULTILINE
 # top-level attributes do), so the docs are the only reliable signal for this.
 _DEPRECATED_BULLET_RE = re.compile(r"^\*\s+`([a-zA-Z0-9_]+)`\s+-\s+\((?:Required|Optional)[^)]*\*\*Deprecated\*\*", re.MULTILINE)
 
+# Same bullet shape, but only when the qualifier does NOT contain **Deprecated**
+# — needed to resolve a name collision found live on aws_s3_bucket's own doc:
+# the top-level `object_lock_enabled` argument is current and NOT deprecated,
+# but the doc also has a *different*, nested `object_lock_configuration` block
+# whose own inner argument happens to share the exact same name and IS marked
+# **Deprecated**. Both are plain "* `object_lock_enabled` - (Optional...)"
+# bullets with no structural marker distinguishing which scope they belong to,
+# so a flat by-name regex conflates them. See deprecated_argument_names below.
+_NON_DEPRECATED_BULLET_RE = re.compile(
+    r"^\*\s+`([a-zA-Z0-9_]+)`\s+-\s+\((?:Required|Optional)(?:(?!\*\*Deprecated\*\*)[^)])*\)", re.MULTILINE
+)
+
 
 def latest_provider_version(provider: str = "azurerm") -> str:
     """Return the latest published version tag (e.g. '5.4.0'), no leading 'v'."""
@@ -84,7 +96,18 @@ def deprecated_argument_names(doc_markdown: str) -> set[str]:
     since the provider itself is telling users to use something else instead.
     Subtract this from documented_argument_names()'s result (via
     schema.exclude_deprecated) before anything reaches the model.
+
+    Only counts a name as deprecated if EVERY bulleted occurrence of it in the
+    doc is marked deprecated. Found live on aws_s3_bucket: `object_lock_enabled`
+    is a genuine, current top-level argument, but the same name also appears,
+    marked **Deprecated**, inside the separate `object_lock_configuration`
+    block's own doc section — a name collision across two different scopes,
+    not one argument that's actually deprecated. Requiring unanimity means a
+    collision like this is resolved by keeping the name (a real current
+    argument is worse to silently drop than a deprecated one is to keep).
     """
     heading = _ATTRIBUTES_HEADING_RE.search(doc_markdown)
     scoped = doc_markdown[: heading.start()] if heading else doc_markdown
-    return set(_DEPRECATED_BULLET_RE.findall(scoped))
+    deprecated = set(_DEPRECATED_BULLET_RE.findall(scoped))
+    non_deprecated = set(_NON_DEPRECATED_BULLET_RE.findall(scoped))
+    return deprecated - non_deprecated

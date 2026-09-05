@@ -85,3 +85,33 @@ def test_non_deprecated_argument_is_not_flagged():
 
 def test_azurerm_style_doc_with_no_deprecated_args_returns_empty_set():
     assert deprecated_argument_names(AZURERM_STYLE_DOC) == set()
+
+
+# Mirrors the real aws_s3_bucket collision: `object_lock_enabled` is a genuine,
+# current top-level argument, but a *different*, nested block's doc section
+# happens to have its own argument with the exact same name, marked Deprecated.
+AMBIGUOUS_NAME_DOC = """
+## Argument Reference
+
+This resource supports the following arguments:
+
+* `object_lock_enabled` - (Optional) Whether this bucket has an Object Lock configuration enabled.
+* `object_lock_configuration` - (Optional, **Deprecated**) Configuration of object locking.
+
+### `object_lock_configuration` Block
+
+The `object_lock_configuration` configuration block supports the following arguments:
+
+* `object_lock_enabled` - (Optional, **Deprecated**) Whether this bucket has an Object Lock configuration enabled. Use the top-level argument instead.
+"""
+
+
+def test_name_deprecated_in_one_scope_but_not_another_is_not_flagged():
+    # object_lock_enabled has one non-deprecated bullet and one deprecated
+    # bullet — ambiguous, so it must NOT be treated as globally deprecated.
+    assert "object_lock_enabled" not in deprecated_argument_names(AMBIGUOUS_NAME_DOC)
+
+
+def test_name_deprecated_in_every_occurrence_is_still_flagged():
+    # object_lock_configuration only ever appears with the Deprecated marker.
+    assert "object_lock_configuration" in deprecated_argument_names(AMBIGUOUS_NAME_DOC)
