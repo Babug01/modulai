@@ -167,6 +167,11 @@ def generate_module(
     files = [GeneratedFile(path=m.group(1), content=m.group(2)) for m in _FILE_BLOCK_RE.finditer(text)]
 
     if not files:
-        raise ValueError("Model response contained no <file> blocks — nothing to write.")
+        # Found live: this raised with zero diagnostic content on a real
+        # Gemini run, leaving no way to tell whether the model ignored the
+        # format, got truncated, or returned something else entirely.
+        # Showing a preview is the difference between "debuggable" and not.
+        preview = text[:1500] + ("... [truncated]" if len(text) > 1500 else "")
+        raise ValueError(f"Model response contained no <file> blocks — nothing to write. Response was:\n{preview}")
 
     return files
