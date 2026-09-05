@@ -130,3 +130,23 @@ def input_schema(resource_schema_entry: dict) -> dict:
     azurerm_key_vault @ v5.4.0: `id` had `optional: true, computed: true`).
     """
     return _filter_block(resource_schema_entry.get("block", {}), is_top_level=True)
+
+
+def cross_reference_with_docs(filtered: dict, documented_names: set[str]) -> dict:
+    """Drop anything input_schema() kept that never actually appears
+    documented as a settable (Required/Optional) argument anywhere in the
+    provider's own docs (see docs.documented_argument_names).
+
+    The `id` carve-out in _filter_block covers one universal, provider-wide
+    case cheaply and without needing the docs at all. This covers everything
+    else — found live: AWS's `tags_all` is optional+computed in the real
+    schema exactly like `id` was, but it's provider-specific (a tag-merge
+    output, not a real input), so a fixed name list doesn't generalize across
+    providers the way cross-referencing against each provider's own docs does.
+    """
+    attributes = {name: attr for name, attr in filtered["attributes"].items() if name in documented_names}
+    block_types = {
+        name: {**bt, "block": cross_reference_with_docs(bt["block"], documented_names)}
+        for name, bt in filtered["block_types"].items()
+    }
+    return {"attributes": attributes, "block_types": block_types}

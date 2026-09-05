@@ -5,7 +5,7 @@ azurerm_storage_account schema at v5.4.0 during development: 102 top-level
 attributes, only 28 of them true inputs, the rest computed-only exports.
 """
 
-from modulai.core.schema import input_schema
+from modulai.core.schema import cross_reference_with_docs, input_schema
 
 FIXTURE_RESOURCE_SCHEMA = {
     "version": 3,
@@ -22,6 +22,10 @@ FIXTURE_RESOURCE_SCHEMA = {
             # A genuine optional+computed *input* (e.g. access_policy-shaped) —
             # proves the id-exclusion is name-specific, not "drop anything computed".
             "access_policy": {"type": ["list", "object"], "optional": True, "computed": True},
+            # Same optional+computed shape as `id`, but provider-specific — seen
+            # live as AWS's `tags_all`. Not caught by the id-exclusion; only
+            # cross_reference_with_docs (below) catches this class of case.
+            "tags_all": {"type": ["map", "string"], "optional": True, "computed": True},
         },
         "block_types": {
             "identity": {
@@ -51,7 +55,7 @@ def test_strips_top_level_computed_only():
 
 def test_keeps_top_level_required_and_optional():
     filtered = input_schema(FIXTURE_RESOURCE_SCHEMA)
-    assert set(filtered["attributes"]) == {"name", "account_tier", "access_tier", "access_policy"}
+    assert set(filtered["attributes"]) == {"name", "account_tier", "access_tier", "access_policy", "tags_all"}
 
 
 def test_drops_top_level_id_even_when_optional_and_computed():
@@ -80,3 +84,28 @@ def test_preserves_nesting_metadata():
     identity_block_type = filtered["block_types"]["identity"]
     assert identity_block_type["nesting_mode"] == "list"
     assert identity_block_type["max_items"] == 1
+
+
+# documented_names below mirrors what documented_argument_names() would
+# extract from a real doc: every real input's name, deliberately missing
+# `tags_all` — it's never documented as settable, exactly like the real AWS case.
+DOCUMENTED_NAMES = {"name", "account_tier", "access_tier", "access_policy", "type", "identity_ids"}
+
+
+def test_cross_reference_drops_undocumented_optional_computed_attribute():
+    filtered = input_schema(FIXTURE_RESOURCE_SCHEMA)
+    cross_referenced = cross_reference_with_docs(filtered, DOCUMENTED_NAMES)
+    assert "tags_all" not in cross_referenced["attributes"]
+
+
+def test_cross_reference_keeps_documented_attributes():
+    filtered = input_schema(FIXTURE_RESOURCE_SCHEMA)
+    cross_referenced = cross_reference_with_docs(filtered, DOCUMENTED_NAMES)
+    assert set(cross_referenced["attributes"]) == {"name", "account_tier", "access_tier", "access_policy"}
+
+
+def test_cross_reference_applies_inside_nested_blocks():
+    filtered = input_schema(FIXTURE_RESOURCE_SCHEMA)
+    cross_referenced = cross_reference_with_docs(filtered, DOCUMENTED_NAMES)
+    identity_attrs = cross_referenced["block_types"]["identity"]["block"]["attributes"]
+    assert set(identity_attrs) == {"type", "identity_ids"}

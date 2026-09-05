@@ -8,10 +8,22 @@ truth; this module is deliberately not authoritative on its own.
 
 from __future__ import annotations
 
+import re
+
 import requests
 
 GITHUB_RAW = "https://raw.githubusercontent.com/hashicorp/terraform-provider-{provider}/v{version}/website/docs/r/{doc_name}.html.markdown"
 GITHUB_RELEASES_LATEST = "https://api.github.com/repos/hashicorp/terraform-provider-{provider}/releases/latest"
+
+# Matches `* \`name\` - (Required) ...` and `* \`name\` - (Optional, **Deprecated**) ...`
+# — the qualifier after Required/Optional varies (AWS adds ", Forces new resource",
+# ", **Deprecated**", etc.), so only the leading word is matched, not the whole parenthetical.
+_ARG_BULLET_RE = re.compile(r"^\*\s+`([a-zA-Z0-9_]+)`\s+-\s+\((?:Required|Optional)\b", re.MULTILINE)
+
+# Section heading naming varies by provider: azurerm uses the plural "Attributes
+# Reference" / "Arguments Reference", AWS uses the singular "Attribute Reference" /
+# "Argument Reference" — found live, checking both providers' actual docs.
+_ATTRIBUTES_HEADING_RE = re.compile(r"^## .*Attributes? Reference", re.MULTILINE)
 
 
 def latest_provider_version(provider: str = "azurerm") -> str:
@@ -38,3 +50,21 @@ def fetch_resource_doc(resource_type: str, version: str, provider: str = "azurer
         )
     resp.raise_for_status()
     return resp.text
+
+
+def documented_argument_names(doc_markdown: str) -> set[str]:
+    """Names actually documented as settable (Required/Optional) anywhere in
+    the doc — the main arguments section and every "A `<block>` block
+    supports the following:" subsection use the same bullet format, at every
+    nesting level, in one flat set.
+
+    Exists because the schema alone isn't sufficient to tell a real input
+    from a computed/merged value that happens to also be marked optional:
+    found live, not by inspection — azurerm's `id` and AWS's `tags_all` both
+    show `optional: true, computed: true` in the real schema despite neither
+    ever being documented as something a user sets. Cross-referencing against
+    the docs generalizes that fix instead of growing a per-provider name list.
+    """
+    heading = _ATTRIBUTES_HEADING_RE.search(doc_markdown)
+    scoped = doc_markdown[: heading.start()] if heading else doc_markdown
+    return set(_ARG_BULLET_RE.findall(scoped))
