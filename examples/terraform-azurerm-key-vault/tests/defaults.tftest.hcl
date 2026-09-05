@@ -39,6 +39,11 @@ run "minimal_creation_plan" {
     condition     = azurerm_key_vault.this.soft_delete_retention_days == 90
     error_message = "soft_delete_retention_days should default to 90"
   }
+
+  assert {
+    condition     = length(azurerm_monitor_metric_alert.this) == 0
+    error_message = "no alerts should be created when alert_rules is left at its null default"
+  }
 }
 
 run "invalid_sku_name_rejected" {
@@ -75,5 +80,50 @@ run "access_policy_plan" {
   assert {
     condition     = contains(azurerm_key_vault.this.access_policy[0].key_permissions, "Get")
     error_message = "access_policy key_permissions should contain Get"
+  }
+}
+
+run "explicit_null_alert_rules_creates_nothing" {
+  command = plan
+
+  variables {
+    alert_rules = null
+  }
+
+  assert {
+    condition     = length(azurerm_monitor_metric_alert.this) == 0
+    error_message = "explicitly passing null for alert_rules must still create zero alerts, not error"
+  }
+}
+
+run "alert_rules_plan" {
+  command = plan
+
+  variables {
+    alert_rules = {
+      availability = {
+        metric_namespace = "Microsoft.KeyVault/vaults"
+        metric_name      = "Availability"
+        aggregation      = "Average"
+        operator         = "LessThan"
+        threshold        = 99
+        severity         = 1
+      }
+    }
+  }
+
+  assert {
+    condition     = length(azurerm_monitor_metric_alert.this) == 1
+    error_message = "alert_rules with one entry should create exactly one alert"
+  }
+
+  assert {
+    condition     = azurerm_monitor_metric_alert.this["availability"].criteria[0].metric_name == "Availability"
+    error_message = "the alert's metric_name should match what was passed in"
+  }
+
+  assert {
+    condition     = azurerm_monitor_metric_alert.this["availability"].severity == 1
+    error_message = "the alert's severity should match what was passed in"
   }
 }

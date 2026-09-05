@@ -148,3 +148,25 @@ variable "enabled_for_template_deployment" {
   type        = bool
   default     = false
 }
+
+#------------------------------------------------------------------------------------------------------------------------------------------
+/*
+  Alerts
+*/
+#------------------------------------------------------------------------------------------------------------------------------------------
+variable "alert_rules" {
+  description = "(Optional) Metric alert rules to create for this Key Vault, keyed by a name you choose. This is a generic pass-through — the module doesn't curate which Key Vault metrics matter, you supply real Azure Monitor criteria (metric_namespace/metric_name/aggregation/operator). Set to `null` (the default) or omit entirely for no alerts."
+  type = map(object({
+    metric_namespace = string
+    metric_name      = string
+    aggregation      = string
+    operator         = string
+    threshold        = number
+    severity         = optional(number, 3)
+    frequency        = optional(string, "PT5M")
+    window_size      = optional(string, "PT15M")
+    action_group_ids = optional(list(string), [])
+    description      = optional(string)
+  }))
+  default = null
+}

@@ -88,8 +88,12 @@ def run_validation_pipeline(module_dir: Path, terraform_bin: str = "terraform", 
     test = _run([terraform_bin, "test"], module_dir, 180)
     report.steps.append(StepResult("test", test.returncode == 0, test.stdout + test.stderr))
 
+    # "." not str(module_dir) — cwd is already module_dir below, so the full
+    # path a second time double-applies it (found live: silently resolved to
+    # a nonexistent nested directory, which checkov skips and exits 0 for —
+    # a false pass, not a real one).
     checkov = _run(
-        [checkov_bin, "-d", str(module_dir), "--framework", "terraform", "--compact"],
+        [checkov_bin, "-d", ".", "--framework", "terraform", "--compact"],
         module_dir, 120,
     )
     # Checkov exits non-zero on any failed check by design — surface it as a

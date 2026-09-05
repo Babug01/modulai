@@ -104,6 +104,38 @@ that entry's object. Add a third vault by adding a third entry to
 `variables.tf` doesn't change either way; `for_each` just calls it
 repeatedly, once per map entry.
 
+## Alerts
+
+`null` (the default) or omitting `alert_rules` entirely creates no alerts —
+this module never assumes you want monitoring. This is a **generic
+pass-through**, not a curated list of "recommended" Key Vault alerts: the
+module doesn't know which metrics matter for your setup, only how to wire up
+whatever criteria you supply. Find real metric names/namespaces in
+[Microsoft's supported-metrics reference](https://learn.microsoft.com/en-us/azure/azure-monitor/reference/supported-metrics/microsoft-keyvault-vaults-metrics).
+
+```hcl
+module "key_vault" {
+  source = "./terraform-azurerm-key-vault"
+  # ...required fields...
+
+  alert_rules = {
+    availability = {
+      metric_namespace = "Microsoft.KeyVault/vaults"
+      metric_name       = "Availability"
+      aggregation        = "Average"
+      operator            = "LessThan"
+      threshold           = 99
+      severity            = 1
+      action_group_ids    = [azurerm_monitor_action_group.example.id]
+    }
+  }
+}
+```
+
+Each map entry becomes one `azurerm_monitor_metric_alert`, named after its
+key (`"availability"` above). Add as many entries as you need; remove the
+variable (or set it to `null`) to disable alerting entirely.
+
 ## Requirements
 
 | Name | Version |

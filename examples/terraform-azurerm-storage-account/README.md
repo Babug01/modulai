@@ -94,6 +94,38 @@ that entry's object. Add a third account by adding a third entry to
 `variables.tf` doesn't change either way; `for_each` just calls it
 repeatedly, once per map entry.
 
+## Alerts
+
+`null` (the default) or omitting `alert_rules` entirely creates no alerts —
+this module never assumes you want monitoring. This is a **generic
+pass-through**, not a curated list of "recommended" storage metrics: the
+module doesn't know which ones matter for your setup, only how to wire up
+whatever criteria you supply. Find real metric names/namespaces in
+[Microsoft's supported-metrics reference](https://learn.microsoft.com/en-us/azure/azure-monitor/reference/supported-metrics/microsoft-storage-storageaccounts-metrics).
+
+```hcl
+module "storage" {
+  source = "./terraform-azurerm-storage-account"
+  # ...required fields...
+
+  alert_rules = {
+    availability = {
+      metric_namespace = "Microsoft.Storage/storageAccounts"
+      metric_name       = "Availability"
+      aggregation        = "Average"
+      operator            = "LessThan"
+      threshold           = 99
+      severity            = 1
+      action_group_ids    = [azurerm_monitor_action_group.example.id]
+    }
+  }
+}
+```
+
+Each map entry becomes one `azurerm_monitor_metric_alert`, named after its
+key (`"availability"` above). Add as many entries as you need; remove the
+variable (or set it to `null`) to disable alerting entirely.
+
 ## Variable shape
 
 Top-level scalars (`name`, `resource_group_name`, `location`, `account_tier`, ...)

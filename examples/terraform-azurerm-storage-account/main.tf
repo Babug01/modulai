@@ -30,26 +30,26 @@ resource "azurerm_storage_account" "this" {
   resource_group_name = var.resource_group_name
   location            = var.location
 
-  account_kind              = var.account_kind
-  account_tier              = var.account_tier
-  account_replication_type  = var.account_replication_type
-  access_tier               = var.access_tier
-  edge_zone                 = var.edge_zone
+  account_kind                      = var.account_kind
+  account_tier                      = var.account_tier
+  account_replication_type          = var.account_replication_type
+  access_tier                       = var.access_tier
+  edge_zone                         = var.edge_zone
   provisioned_billing_model_version = var.provisioned_billing_model_version
 
-  cross_tenant_replication_enabled = var.cross_tenant_replication_enabled
-  https_traffic_only_enabled       = var.https_traffic_only_enabled
-  min_tls_version                  = var.min_tls_version
-  allow_nested_items_to_be_public  = var.allow_nested_items_to_be_public
-  shared_access_key_enabled        = var.shared_access_key_enabled
-  public_network_access_enabled    = var.public_network_access_enabled
-  default_to_oauth_authentication  = var.default_to_oauth_authentication
-  is_hns_enabled                   = var.is_hns_enabled
-  nfsv3_enabled                    = var.nfsv3_enabled
-  large_file_share_enabled         = var.large_file_share_enabled
-  local_user_enabled               = var.local_user_enabled
-  queue_encryption_key_type        = var.queue_encryption_key_type
-  table_encryption_key_type        = var.table_encryption_key_type
+  cross_tenant_replication_enabled  = var.cross_tenant_replication_enabled
+  https_traffic_only_enabled        = var.https_traffic_only_enabled
+  min_tls_version                   = var.min_tls_version
+  allow_nested_items_to_be_public   = var.allow_nested_items_to_be_public
+  shared_access_key_enabled         = var.shared_access_key_enabled
+  public_network_access_enabled     = var.public_network_access_enabled
+  default_to_oauth_authentication   = var.default_to_oauth_authentication
+  is_hns_enabled                    = var.is_hns_enabled
+  nfsv3_enabled                     = var.nfsv3_enabled
+  large_file_share_enabled          = var.large_file_share_enabled
+  local_user_enabled                = var.local_user_enabled
+  queue_encryption_key_type         = var.queue_encryption_key_type
+  table_encryption_key_type         = var.table_encryption_key_type
   infrastructure_encryption_enabled = var.infrastructure_encryption_enabled
   allowed_copy_scope                = var.allowed_copy_scope
   sftp_enabled                      = var.sftp_enabled
@@ -182,8 +182,8 @@ resource "azurerm_storage_account" "this" {
   dynamic "azure_files_authentication" {
     for_each = var.azure_files_authentication != null ? [var.azure_files_authentication] : []
     content {
-      directory_type                  = azure_files_authentication.value.directory_type
-      default_share_level_permission  = azure_files_authentication.value.default_share_level_permission
+      directory_type                 = azure_files_authentication.value.directory_type
+      default_share_level_permission = azure_files_authentication.value.default_share_level_permission
 
       dynamic "active_directory" {
         for_each = azure_files_authentication.value.active_directory != null ? [azure_files_authentication.value.active_directory] : []

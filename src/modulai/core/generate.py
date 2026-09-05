@@ -43,6 +43,19 @@ these non-negotiable rules:
    one scenario exercising a commonly-used optional nested block, and one \
    scenario asserting a validation block correctly rejects bad input.
 6. Follow Azure Verified Modules (AVM) structural conventions where they apply.
+7. Generate alerts.tf: one `azurerm_monitor_metric_alert` resource, `for_each` over \
+   a single `alert_rules` variable — `type = map(object({ metric_namespace, \
+   metric_name, aggregation, operator, threshold, severity = optional(number, 3), \
+   frequency = optional(string, "PT5M"), window_size = optional(string, "PT15M"), \
+   action_group_ids = optional(list(string), []), description = optional(string) \
+   }))`, `default = null`. The `for_each` expression MUST be \
+   `var.alert_rules != null ? var.alert_rules : {}` — `for_each` errors on a bare \
+   null, so guarding it in the expression itself is not optional. `scopes` is the \
+   primary resource's own `.id`. Never invent metric_namespace/metric_name values — \
+   this is a generic pass-through the caller fills in with real Azure Monitor \
+   criteria, not a curated per-resource menu (that would need grounding this tool \
+   doesn't have yet). Document in the README, explicitly, that `null` or omitting \
+   the variable both mean "no alerts."
 
 Output each file wrapped exactly like this, one block per file, nothing else \
 outside the blocks:
@@ -62,7 +75,7 @@ Provider schema (ground truth for structure/types):
 Provider documentation (ground truth for descriptions only):
 {docs_markdown}
 
-Generate: main.tf, variables.tf, outputs.tf, README.md, tests/defaults.tftest.hcl
+Generate: main.tf, variables.tf, outputs.tf, alerts.tf, README.md, tests/defaults.tftest.hcl
 """
 
 _FILE_BLOCK_RE = re.compile(r'<file path="([^"]+)">\n(.*?)\n</file>', re.DOTALL)

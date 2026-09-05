@@ -259,11 +259,11 @@ variable "identity" {
 variable "blob_properties" {
   description = "(Optional) Blob service properties — versioning, change feed, CORS, retention. Set to `null` to omit (default)."
   type = object({
-    versioning_enabled             = optional(bool, false)
-    change_feed_enabled            = optional(bool, false)
-    change_feed_retention_in_days  = optional(number)
-    default_service_version        = optional(string)
-    last_access_time_enabled       = optional(bool, false)
+    versioning_enabled            = optional(bool, false)
+    change_feed_enabled           = optional(bool, false)
+    change_feed_retention_in_days = optional(number)
+    default_service_version       = optional(string)
+    last_access_time_enabled      = optional(bool, false)
     cors_rule = optional(list(object({
       allowed_headers    = list(string)
       allowed_methods    = list(string)
@@ -350,11 +350,11 @@ variable "azure_files_authentication" {
     directory_type = string
     active_directory = optional(object({
       domain_name         = string
-      domain_guid          = string
-      domain_sid           = optional(string)
-      storage_sid          = optional(string)
-      forest_name          = optional(string)
-      netbios_domain_name  = optional(string)
+      domain_guid         = string
+      domain_sid          = optional(string)
+      storage_sid         = optional(string)
+      forest_name         = optional(string)
+      netbios_domain_name = optional(string)
     }))
     default_share_level_permission = optional(string)
   })
@@ -390,8 +390,8 @@ variable "immutability_policy" {
   description = "(Optional) Account-level default immutability policy. Changing this forces a new resource. Set to `null` to omit (default)."
   type = object({
     allow_protected_append_writes = bool
-    state                          = string
-    period_since_creation_in_days  = number
+    state                         = string
+    period_since_creation_in_days = number
   })
   default = null
 
@@ -412,5 +412,27 @@ variable "sas_policy" {
     expiration_period = string
     expiration_action = optional(string, "Log")
   })
+  default = null
+}
+
+#------------------------------------------------------------------------------------------------------------------------------------------
+/*
+  Alerts
+*/
+#------------------------------------------------------------------------------------------------------------------------------------------
+variable "alert_rules" {
+  description = "(Optional) Metric alert rules to create for this storage account, keyed by a name you choose. This is a generic pass-through — the module doesn't curate which storage metrics matter, you supply real Azure Monitor criteria (metric_namespace/metric_name/aggregation/operator). Set to `null` (the default) or omit entirely for no alerts."
+  type = map(object({
+    metric_namespace = string
+    metric_name      = string
+    aggregation      = string
+    operator         = string
+    threshold        = number
+    severity         = optional(number, 3)
+    frequency        = optional(string, "PT5M")
+    window_size      = optional(string, "PT15M")
+    action_group_ids = optional(list(string), [])
+    description      = optional(string)
+  }))
   default = null
 }
