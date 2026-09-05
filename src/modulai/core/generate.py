@@ -93,6 +93,14 @@ these non-negotiable rules:
    anywhere in it, since the whole object inherits that sensitivity, and it defeats \
    the point of curated outputs regardless. Mark an individual output `sensitive = \
    true` whenever its value is a credential, key, connection string, or password.
+9. Wrap an output's value in `try(..., null)` ONLY when it comes from a \
+   variable-gated optional/dynamic block that might not exist (e.g. \
+   `try(azurerm_key_vault.this.identity[0].principal_id, null)` when `var.identity` \
+   can be null) — indexing into an empty list from an unconfigured dynamic block is \
+   exactly what errors without it. Do NOT wrap outputs that always exist once the \
+   resource is created (id, name, always-computed values) — try() there hides a \
+   genuine typo or bug behind a silent null instead of a clear error at plan time; \
+   it is a targeted fix for real conditional-absence, not a blanket habit.
 
 Output each file wrapped exactly like this, one block per file, nothing else \
 outside the blocks:
