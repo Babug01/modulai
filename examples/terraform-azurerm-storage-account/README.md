@@ -44,20 +44,40 @@ module "storage" {
 
 ## Creating multiple accounts
 
-This module manages **one** storage account. Multiplicity is the caller's
-decision — wrap the module in `for_each`, not the other way around:
+This module manages **one** storage account. Need three? Don't copy-paste
+the `module` block three times with different values — that's what
+`for_each` replaces:
 
 ```hcl
-locals {
-  storage_accounts = {
-    logs   = { replication = "LRS", tier = "Standard" }
-    assets = { replication = "GRS", tier = "Standard" }
+# The boring way — repeat the block per account, only values differ:
+module "storage_logs" {
+  source                    = "./terraform-azurerm-storage-account"
+  name                       = "stlogs"
+  resource_group_name        = azurerm_resource_group.example.name
+  location                    = azurerm_resource_group.example.location
+  account_tier                = "Standard"
+  account_replication_type    = "LRS"
+}
+module "storage_assets" {
+  source                    = "./terraform-azurerm-storage-account"
+  name                       = "stassets"
+  # ...same fields again...
+}
+```
+
+```hcl
+# The for_each way — one block, one variable (a map), as many accounts as it has entries:
+variable "storage_accounts" {
+  type    = map(object({ tier = string, replication = string }))
+  default = {
+    logs   = { tier = "Standard", replication = "LRS" }
+    assets = { tier = "Standard", replication = "GRS" }
   }
 }
 
 module "storage" {
   source   = "./terraform-azurerm-storage-account"
-  for_each = local.storage_accounts
+  for_each = var.storage_accounts
 
   name                      = "sttfgen${each.key}"
   resource_group_name       = azurerm_resource_group.example.name
@@ -66,6 +86,13 @@ module "storage" {
   account_replication_type  = each.value.replication
 }
 ```
+
+This creates `module.storage["logs"]` and `module.storage["assets"]` from
+one block. `each.key` is the map key (`"logs"`, `"assets"`); `each.value` is
+that entry's object. Add a third account by adding a third entry to
+`var.storage_accounts` — no new `module` block needed. The module's own
+`variables.tf` doesn't change either way; `for_each` just calls it
+repeatedly, once per map entry.
 
 ## Variable shape
 

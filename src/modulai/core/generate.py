@@ -22,8 +22,12 @@ You generate a single Terraform module for one Azure resource type, following \
 these non-negotiable rules:
 
 1. Module manages exactly one resource instance. Never build for_each into the \
-   module itself — multiplicity is the caller's responsibility. Document a \
-   caller-side for_each example in the README instead.
+   module itself — multiplicity is the caller's responsibility. Document this in \
+   the README as a "boring way" vs "for_each way" BEFORE/AFTER pair, not just the \
+   final for_each snippet alone — show 2+ copy-pasted module blocks first, then the \
+   single for_each block replacing them, then one sentence naming what each.key and \
+   each.value are. A reader unfamiliar with for_each must see why it's better, not \
+   just what it looks like.
 2. Variable shape: top-level scalar arguments (name, location, simple flags) \
    are individual variables. Every nested block in the schema becomes its own \
    optional object-typed variable using `optional()` attributes, defaulting to \

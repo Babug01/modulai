@@ -52,21 +52,57 @@ module "key_vault" {
 
 ## Creating multiple key vaults
 
-This module manages **one** Key Vault. Multiplicity is the caller's decision:
+This module manages **one** Key Vault. Need three? Don't copy-paste the
+`module` block three times with different values — that's what `for_each`
+replaces:
 
 ```hcl
-module "key_vault" {
-  source   = "./terraform-azurerm-key-vault"
-  for_each = local.key_vaults
-
-  name                       = "kv${each.key}"
+# The boring way — repeat the block per vault, only values differ:
+module "key_vault_dev" {
+  source                     = "./terraform-azurerm-key-vault"
+  name                       = "kvdev"
   location                   = azurerm_resource_group.example.location
   resource_group_name        = azurerm_resource_group.example.name
   tenant_id                  = data.azurerm_client_config.current.tenant_id
   sku_name                   = "standard"
   rbac_authorization_enabled = true
 }
+module "key_vault_prod" {
+  source                     = "./terraform-azurerm-key-vault"
+  name                       = "kvprod"
+  # ...same fields again...
+}
 ```
+
+```hcl
+# The for_each way — one block, one variable (a map), as many vaults as it has entries:
+variable "key_vaults" {
+  type    = map(object({ sku_name = string }))
+  default = {
+    dev  = { sku_name = "standard" }
+    prod = { sku_name = "premium" }
+  }
+}
+
+module "key_vault" {
+  source   = "./terraform-azurerm-key-vault"
+  for_each = var.key_vaults
+
+  name                       = "kv${each.key}"
+  location                   = azurerm_resource_group.example.location
+  resource_group_name        = azurerm_resource_group.example.name
+  tenant_id                  = data.azurerm_client_config.current.tenant_id
+  sku_name                   = each.value.sku_name
+  rbac_authorization_enabled = true
+}
+```
+
+This creates `module.key_vault["dev"]` and `module.key_vault["prod"]` from
+one block. `each.key` is the map key (`"dev"`, `"prod"`); `each.value` is
+that entry's object. Add a third vault by adding a third entry to
+`var.key_vaults` — no new `module` block needed. The module's own
+`variables.tf` doesn't change either way; `for_each` just calls it
+repeatedly, once per map entry.
 
 ## Requirements
 
