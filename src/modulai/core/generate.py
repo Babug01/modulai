@@ -25,6 +25,14 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+# Found live: 8000 was too low. A full 6-file module (main.tf's many dynamic
+# blocks + variables.tf + outputs.tf + alerts.tf + README.md + tests) needs
+# more than that in visible output alone, and finish_reason='length' showed
+# Gemini getting cut off well before the format's opening tag even survived
+# in the response — some of the budget likely went to internal reasoning
+# before visible output started. Generous headroom, not a tight estimate.
+MAX_OUTPUT_TOKENS = 32000
+
 DEFAULT_MODEL_BY_PROVIDER = {
     "anthropic": "anthropic/claude-sonnet-5",
     # gemini-2.5-flash was retired for new users as of live testing (Sept 2026)
@@ -129,7 +137,7 @@ def _call_litellm(api_key: str, model: str, system_prompt: str, user_prompt: str
     response = litellm.completion(
         model=model,
         api_key=api_key,
-        max_tokens=8000,
+        max_tokens=MAX_OUTPUT_TOKENS,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -204,10 +212,16 @@ def generate_module(
             "either the model didn't use the required format, or (seen live on Gemini) "
             "the response is missing its own beginning."
         )
+        length_hint = (
+            f" finish_reason='length' means the response was cut off by the {MAX_OUTPUT_TOKENS}-token "
+            "limit before completing — this resource's full module needs more room than that."
+            if result.finish_reason == "length"
+            else ""
+        )
         raise ValueError(
             f"Model response contained no <file> blocks — nothing to write. "
             f"{tag_diagnosis} finish_reason={result.finish_reason!r}, "
-            f"provider_specific_fields={result.provider_specific_fields!r}. "
+            f"provider_specific_fields={result.provider_specific_fields!r}.{length_hint} "
             f"Full response saved to {dump_path}"
         )
 
