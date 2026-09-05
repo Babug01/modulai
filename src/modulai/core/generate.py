@@ -116,7 +116,14 @@ class GeneratedFile:
     content: str
 
 
-def _call_litellm(api_key: str, model: str, system_prompt: str, user_prompt: str) -> str:
+@dataclass
+class _ModelCallResult:
+    text: str
+    finish_reason: str | None
+    provider_specific_fields: dict | None
+
+
+def _call_litellm(api_key: str, model: str, system_prompt: str, user_prompt: str) -> _ModelCallResult:
     import litellm  # lazy: only actually needed when generating, not for schema/docs/validate use
 
     response = litellm.completion(
@@ -128,7 +135,12 @@ def _call_litellm(api_key: str, model: str, system_prompt: str, user_prompt: str
             {"role": "user", "content": user_prompt},
         ],
     )
-    return response.choices[0].message.content
+    choice = response.choices[0]
+    return _ModelCallResult(
+        text=choice.message.content,
+        finish_reason=getattr(choice, "finish_reason", None),
+        provider_specific_fields=getattr(choice, "provider_specific_fields", None),
+    )
 
 
 def generate_module(
@@ -163,18 +175,20 @@ def generate_module(
         alert_docs_markdown=alert_docs_markdown,
     )
 
-    text = _call_litellm(api_key, resolved_model, SYSTEM_PROMPT, user_prompt)
+    result = _call_litellm(api_key, resolved_model, SYSTEM_PROMPT, user_prompt)
+    text = result.text
     files = [GeneratedFile(path=m.group(1), content=m.group(2)) for m in _FILE_BLOCK_RE.finditer(text)]
 
     if not files:
-        # Found live: a 1500-char preview wasn't enough to tell whether the
-        # tag was missing entirely or just didn't match the regex exactly
-        # (whitespace/newline variance across models is real) — that first
-        # real failure showed content from deep inside a file, meaning
-        # whatever preceded it (the opening tag, if present) was already
-        # past the preview window. Dump the full response to disk instead of
-        # guessing at a preview size, and report the one fact that actually
-        # distinguishes the two cases: does the literal tag string appear at all.
+        # Found live on Gemini: a response that starts mid-word, mid-attribute
+        # ("_policy.value.expiration_period" — missing the "sas" and
+        # everything before it), well past where <file path="main.tf"> and
+        # several earlier dynamic blocks should be. Whatever litellm handed
+        # back had already lost its beginning — not a formatting mismatch,
+        # not the model ignoring instructions. finish_reason and
+        # provider_specific_fields are the two things that can actually
+        # explain a gap like that (e.g. MAX_TOKENS with content dropped, or a
+        # multi-part response where an earlier part went missing).
         import tempfile
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
@@ -187,11 +201,14 @@ def generate_module(
             "regex likely failed to match its exact formatting (see the dump)."
             if tag_index != -1
             else f"'<file path=\"' does not appear anywhere in the {len(text)}-character response — "
-            "the model didn't use the required format at all."
+            "either the model didn't use the required format, or (seen live on Gemini) "
+            "the response is missing its own beginning."
         )
         raise ValueError(
             f"Model response contained no <file> blocks — nothing to write. "
-            f"{tag_diagnosis} Full response saved to {dump_path}"
+            f"{tag_diagnosis} finish_reason={result.finish_reason!r}, "
+            f"provider_specific_fields={result.provider_specific_fields!r}. "
+            f"Full response saved to {dump_path}"
         )
 
     return files
